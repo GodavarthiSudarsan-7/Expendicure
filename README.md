@@ -358,6 +358,83 @@ from the token — endpoints do **not** accept a `student_id` parameter.
 
 **The LLM does not calculate financial truth.** It obtains every financial fact from a deterministic tool and passes the structured result through unchanged.
 
+## Financial Trust Layer (Phase 12)
+
+The LLM can **explain** financial truth. It cannot **create** it. Phase 12 adds a
+small deterministic **number guard** that runs after Herman drafts a reply and
+before that reply leaves the process — a trust boundary, not more AI.
+
+```
+                 USER
+                   ↓
+                HERMAN  (planner — picks one registered tool)
+                   ↓
+          DETERMINISTIC TOOL  (finance / decision engine)
+                   ↓
+         AUTHORITATIVE RESULT  (ToolResult.data — the ONLY source of figures)
+                   ↓
+               RESPONDER  (LLM: explain the result; optional RAG concepts)
+                   ↓
+          NUMBER RECONCILIATION  (agent/number_guard.py — pure, deterministic)
+              ↓            ↓
+            SAFE         UNSAFE
+              ↓            ↓
+          RESPONSE   DETERMINISTIC FALLBACK  (responder.deterministic_fallback)
+```
+
+**What is authoritative.** For every financial answer the single source of truth
+is `ToolResult.data` (equivalently `.summary`) produced by a deterministic
+engine. The user message, planner output, LLM output, RAG passages and
+conversation history are **never** authoritative — they may shape *intent* (which
+tool, which amount, which category) but never a figure about the user's money.
+
+**The number guard** (`backend/agent/number_guard.py`, ~260 lines, stdlib only):
+
+1. **Extraction & normalisation** — pulls money-shaped values out of Herman's
+   reply. `₹5,000` / `₹ 5000` / `INR 5000` / `Rs. 5,000` / `5000 INR` / `5k` all
+   normalise to the same `Decimal("5000.00")`; `1 crore` / `2 lakh` are expanded.
+   Percentages, `78/100` scores, `wait 8 days`, ISO dates, years and bare small
+   integers are **not** treated as money.
+2. **Authorised-number check** — every money figure in the reply must already
+   exist (as an absolute 2‑dp `Decimal`) somewhere in the authoritative result.
+   A fabricated balance (`₹18,000` when the twin says `₹14,000`) or a made-up
+   projected number (`₹5,900`) is rejected. `Decimal` throughout — never float
+   equality.
+3. **Currency check** — the currency is always the rupee. `$`, `USD`, `€`, `£`
+   and friends next to a number are rejected; currencies are never silently
+   converted.
+4. **Verdict integrity** — for `evaluate_financial_decision` the engine's
+   `decision` (BUY / WAIT / SPEND_LESS / AVOID) and `risk_change` are
+   authoritative; a reply that flips WAIT/AVOID into "go ahead and buy" (or the
+   reverse) is rejected. For `check_affordability` the engine's `verdict`
+   (`affordable` / `tight` / `not_affordable`) cannot be contradicted.
+5. **Forecast framing** — a `get_cashflow_forecast` reply that states a figure
+   must frame it as a projection ("projected", "expected", "on track to end
+   around"), never as the user's current or guaranteed balance.
+
+**On failure** the drafted reply is discarded and replaced by
+`responder.deterministic_fallback(plan, tool_result)` — a template filled only
+with authoritative values (no LLM, no recomputation). When there is no
+authoritative result at all (a general question, a tool error) the reply becomes
+a fixed safe sentence with no figures.
+
+**RAG stays non-authoritative.** `retrieve_financial_knowledge` returns concepts
+only ("a safety buffer absorbs unexpected costs"); the guard treats a pure
+knowledge reply with the light no-authority rules and, in a decision answer,
+any RAG-sourced figure is caught by the authorised-number check because it will
+not be in the decision engine's result. RAG failure (Ollama down) never blocks
+the decision engine, the guard, or Herman.
+
+**Observability.** Each `AgentResponse` carries `ai.guard =
+{passed, reason, fallback_used}` — a coarse status only. Raw model output,
+prompts, stack traces and model internals are never exposed. The guard adds no
+model call and runs in well under a millisecond.
+
+**Read-only.** Phase 12 introduces no `INSERT` / `UPDATE` / `DELETE`. The guard
+imports only the standard library (`re`, `decimal`, `dataclasses`) — no
+`finance`, `finance_db`, `database`, Flask or Ollama — so the layering
+`finance ← {decision, tools, knowledge} ← agent ← routes` is unchanged.
+
 ## AI agent architecture (planned)
 
 Expendicure is designed to become a **proactive AI financial decision agent**, not

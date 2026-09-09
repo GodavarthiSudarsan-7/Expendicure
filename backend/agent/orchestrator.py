@@ -16,6 +16,7 @@ from datetime import date
 
 from ai.ollama_client import OllamaClient
 from agent import conversation as convo
+from agent import number_guard
 from agent import planner as planner_mod
 from agent import responder as responder_mod
 from agent.context import build_context
@@ -98,8 +99,27 @@ class Herman:
         # --- Stage 3: respond ---
         text = responder_mod.respond(message, plan, tool_result, self._client, knowledge=knowledge)
 
+        # --- Stage 3b: number guard — deterministic financial-trust boundary ---
+        # The deterministic tool result is the ONLY source of financial truth.
+        # If Herman's reply introduces an unauthorised figure, swaps the
+        # currency, or contradicts the engine's verdict, we drop it and explain
+        # the verified result instead. No extra model call.
+        tool_ok = tool_result is not None and tool_result.ok
+        guard = number_guard.verify(
+            plan.tool if tool_ok else None,
+            tool_result.data if tool_ok else None,
+            text,
+            intent=plan.intent,
+            summary=tool_result.summary if tool_ok else None,
+        )
+        guard_meta = {"passed": guard.ok, "reason": guard.reason, "fallback_used": False}
+        if not guard.ok:
+            text = (responder_mod.deterministic_fallback(plan, tool_result)
+                    if tool_ok else number_guard.SAFE_GENERIC_REPLY)
+            guard_meta["fallback_used"] = True
+
         data = {}
-        if tool_result is not None and tool_result.ok:
+        if tool_ok:
             data = dict(tool_result.data)
         if knowledge:
             data["knowledge_used"] = [{"title": k["title"], "source": k["source"]} for k in knowledge]
@@ -107,11 +127,11 @@ class Herman:
         resp = AgentResponse(
             text=text,
             intent=plan.intent,
-            tool_used=(plan.tool if (tool_result is not None and tool_result.ok) else None),
+            tool_used=(plan.tool if tool_ok else None),
             data=data,
             suggested_actions=_suggested_actions(plan, tool_result),
             conversation_id=conv["id"],
-            ai={"available": True},
+            ai={"available": True, "guard": guard_meta},
         )
         convo.append(conv, "herman", resp.text)
         return resp

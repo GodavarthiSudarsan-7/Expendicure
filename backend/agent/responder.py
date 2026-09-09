@@ -89,6 +89,16 @@ def _general(message, client):
 
 # ---------------------------------------------------------------- deterministic fallbacks
 
+def deterministic_fallback(plan, tool_result) -> str:
+    """A safe reply built ONLY from the authoritative deterministic result.
+
+    Used by the Phase 12 number guard when Herman's drafted reply fails
+    verification (unauthorized figure, currency swap, verdict contradiction).
+    No LLM, no recomputation — every number comes straight from ``tool_result``.
+    """
+    return _fallback(plan, tool_result)
+
+
 def _fallback(plan, tool_result):
     if not tool_result.ok:
         return f"I couldn't complete that — {tool_result.error}."
