@@ -1,230 +1,133 @@
-import React, { useState, useEffect } from 'react';
-import api from '../api/api';
-import { Card, CardHeader, CardTitle, CardContent } from '../components/ui/Card';
-import { Button } from '../components/ui/Button';
-import { Input } from '../components/ui/Input';
-import { Select } from '../components/ui/Select';
-import { Table, TableHeader, TableBody, TableRow, TableCell } from '../components/ui/Table';
+import React, { useState } from 'react';
+import { budgetsApi, categoriesApi, twinApi, apiError } from '../api';
+import { useAsync } from '../hooks/useAsync';
+import {
+  Card, CardHead, CardBody, Field, Select, MoneyInput, Button, Badge, ProgressBar,
+  EmptyState, ErrorState, Skeleton, StatCard, ConfirmDialog, Alert, useToast,
+} from '../components/ui';
+import { money, num } from '../lib/format';
 
-const Budget = () => {
-  const [budgets, setBudgets] = useState([]);
-  const [categories, setCategories] = useState([]);
-  const [formData, setFormData] = useState({
-    category_id: '',
-    monthly_limit: '',
-    month: ''
-  });
-  const [loading, setLoading] = useState(false);
-  const [error, setError] = useState(null);
-  const [success, setSuccess] = useState(null);
+function thisMonth() {
+  const d = new Date();
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
+}
 
-  // Get current month in YYYY-MM format
-  const getCurrentMonth = () => {
-    const now = new Date();
-    const year = now.getFullYear();
-    const month = String(now.getMonth() + 1).padStart(2, '0');
-    return `${year}-${month}`;
-  };
+export default function Budget() {
+  const toast = useToast();
+  const [month] = useState(thisMonth());
+  const budgets = useAsync(() => budgetsApi.list(month), [month]);
+  const cats = useAsync(() => categoriesApi.list(), []);
+  const twin = useAsync(() => twinApi.state(), []);
+  const [form, setForm] = useState({ category_id: '', monthly_limit: '' });
+  const [busy, setBusy] = useState(false);
+  const [err, setErr] = useState(null);
+  const [toDelete, setToDelete] = useState(null);
+  const set = (k) => (e) => setForm((f) => ({ ...f, [k]: e.target.value }));
 
-  useEffect(() => {
-    fetchCategories();
-    fetchBudgets();
-  }, []);
+  const spendByCat = twin.data?.spending_by_category || {};
 
-  const fetchCategories = async () => {
-    try {
-      const response = await api.get('/categories');
-      setCategories(response.data);
-    } catch (err) {
-      console.error('Failed to fetch categories:', err);
-    }
-  };
-
-  const fetchBudgets = async () => {
-    try {
-      const response = await api.get(`/budgets`);
-      setBudgets(response.data);
-    } catch (err) {
-      console.error('Failed to fetch budgets:', err);
-    }
-  };
-
-  const handleChange = (e) => {
-    const { name, value } = e.target;
-    setFormData(prev => ({
-      ...prev,
-      [name]: value
-    }));
-  };
-
-  const handleSubmit = async (e) => {
+  const save = async (e) => {
     e.preventDefault();
-    setLoading(true);
-    setError(null);
-    setSuccess(null);
+    setErr(null);
+    if (!form.category_id || !form.monthly_limit) return setErr('Choose a category and a limit.');
+    setBusy(true);
     try {
-      // Check if we are updating or creating
-      const existingBudget = budgets.find(b => 
-        b.category_id === Number(formData.category_id) && 
-        b.month === formData.month
-      );
-
-      if (existingBudget) {
-        // Update existing budget
-        await api.put(`/budgets`, {
-          category_id: formData.category_id,
-          monthly_limit: formData.monthly_limit,
-          month: formData.month
-        });
-        setSuccess('Budget updated successfully!');
-      } else {
-        // Create new budget
-        await api.post(`/budgets`, {
-          category_id: formData.category_id,
-          monthly_limit: formData.monthly_limit,
-          month: formData.month
-        });
-        setSuccess('Budget added successfully!');
-      }
-      // Refresh budgets
-      fetchBudgets();
-      // Reset form (except student_id and month)
-      setFormData(prev => ({
-        ...prev,
-        category_id: '',
-        monthly_limit: ''
-      }));
-    } catch (err) {
-      setError('Failed to save budget');
-      console.error(err);
-    } finally {
-      setLoading(false);
-    }
+      await budgetsApi.upsert({ category_id: Number(form.category_id), monthly_limit: form.monthly_limit, month });
+      toast('Budget saved', 'ok');
+      setForm({ category_id: '', monthly_limit: '' });
+      budgets.reload();
+    } catch (e2) { setErr(apiError(e2)); }
+    finally { setBusy(false); }
   };
+
+  const rows = budgets.data || [];
+  const totalBudget = rows.reduce((s, b) => s + num(b.monthly_limit), 0);
+  const totalSpent = rows.reduce((s, b) => s + num(spendByCat[b.category_name] || 0), 0);
 
   return (
-    <div className="budget-page">
-      <div className="page-header">
-        <h1>Budget Management</h1>
-        <div className="controls">
-          <div className="month-selector">
-            <label>Month: </label>
-            <Input
-              type="month"
-              value={formData.month || getCurrentMonth()}
-              onChange={handleChange}
-              required
-            />
-          </div>
+    <>
+      <div className="page-head">
+        <div>
+          <div className="eyebrow">Month {month}</div>
+          <h1>Budgets</h1>
+          <div className="sub">Month-to-date spending is read from your Financial Digital Twin.</div>
         </div>
       </div>
 
-      {success && <div className="alert alert-success">{success}</div>}
-      {error && <div className="alert alert-error">{error}</div>}
+      {budgets.error && <ErrorState message={budgets.error} onRetry={budgets.reload} />}
 
-      <Card>
-        <CardHeader>
-          <CardTitle>Set Budget</CardTitle>
-        </CardHeader>
-        <CardContent>
-          <form onSubmit={handleSubmit}>
-            <div className="form-group">
-              <label htmlFor="category_id">Category</label>
-              <Select
-                name="category_id"
-                value={formData.category_id}
-                onChange={handleChange}
-                required
-              >
-                <option value="">Select a category</option>
-                {categories.map(category => (
-                  <option key={category.id} value={category.id}>
-                    {category.name}
-                  </option>
-                ))}
-              </Select>
-            </div>
+      <div className="grid grid-3 mb-6">
+        <StatCard label="Total budget" tone="brand" value={money(totalBudget)} />
+        <StatCard label="Spent so far" tone={totalSpent > totalBudget ? 'bad' : 'neutral'} value={money(totalSpent)} />
+        <StatCard label="Remaining" tone={totalBudget - totalSpent >= 0 ? 'ok' : 'bad'} value={money(totalBudget - totalSpent)} />
+      </div>
 
-            <div className="form-group">
-              <label htmlFor="monthly_limit">Monthly Limit ($)</label>
-              <Input
-                type="number"
-                name="monthly_limit"
-                value={formData.monthly_limit}
-                onChange={handleChange}
-                required
-                step="0.01"
-                min="0"
-              />
-            </div>
+      <div className="grid grid-2" style={{ gridTemplateColumns: '340px 1fr', alignItems: 'start' }}>
+        <Card>
+          <CardHead><h3>Set a budget</h3></CardHead>
+          <CardBody>
+            <form onSubmit={save}>
+              <Field label="Category">
+                <Select value={form.category_id} onChange={set('category_id')}>
+                  <option value="">Select…</option>
+                  {(cats.data || []).map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}
+                </Select>
+              </Field>
+              <Field label="Monthly limit"><MoneyInput value={form.monthly_limit} onChange={set('monthly_limit')} /></Field>
+              {err && <Alert tone="bad">{err}</Alert>}
+              <Button type="submit" block loading={busy}>Save budget</Button>
+            </form>
+          </CardBody>
+        </Card>
 
-            <div className="form-actions">
-              <Button type="submit" loading={loading}>
-                Save Budget
-              </Button>
-              <Button type="button" variant="outline" onClick={() => {
-                setFormData(prev => ({
-                  ...prev,
-                  category_id: '',
-                  monthly_limit: ''
-                }));
-              }}>
-                Clear
-              </Button>
-            </div>
-          </form>
-        </CardContent>
-      </Card>
+        <Card>
+          <CardHead><h3>Category budgets</h3></CardHead>
+          <CardBody>
+            {budgets.loading ? (
+              <><Skeleton className="sk-line" /><Skeleton className="sk-line" /><Skeleton className="sk-line" /></>
+            ) : rows.length ? (
+              <div className="col gap-6">
+                {rows.map((b) => {
+                  const spent = num(spendByCat[b.category_name] || 0);
+                  const limit = num(b.monthly_limit);
+                  const pct = limit > 0 ? (spent / limit) * 100 : 0;
+                  const over = spent > limit;
+                  const tone = over ? 'bad' : pct >= 80 ? 'warn' : 'ok';
+                  return (
+                    <div key={b.id}>
+                      <div className="row between mb-2">
+                        <strong>{b.category_name}</strong>
+                        <div className="row gap-2">
+                          <span className="tabular soft">{money(spent)} / {money(limit)}</span>
+                          <button className="btn btn-sm btn-ghost" onClick={() => setToDelete(b)}>Remove</button>
+                        </div>
+                      </div>
+                      <ProgressBar value={pct} tone={tone} />
+                      <div className="row between mt-2" style={{ fontSize: '0.82rem' }}>
+                        {over
+                          ? <Badge tone="bad">{money(spent - limit)} over budget</Badge>
+                          : <span className="muted">{money(limit - spent)} remaining</span>}
+                        <span className="muted">{Math.round(pct)}%</span>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            ) : (
+              <EmptyState emoji="◑" title="No budgets set">Set a limit for a category and Expendicure will track it against your spending.</EmptyState>
+            )}
+          </CardBody>
+        </Card>
+      </div>
 
-      <Card>
-        <CardHeader>
-          <CardTitle>Current Budgets</CardTitle>
-        </CardHeader>
-        <CardContent>
-          {budgets.length > 0 ? (
-            <Table>
-              <TableHeader>
-                <TableRow>
-                  <TableCell>Category</TableCell>
-                  <TableCell>Monthly Limit</TableCell>
-                  <TableCell>Month</TableCell>
-                  <TableCell>Actions</TableCell>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {budgets.map((budget) => (
-                  <TableRow key={budget.id}>
-                    <TableCell>{budget.category_name}</TableCell>
-                    <TableCell>${budget.monthly_limit}</TableCell>
-                    <TableCell>{budget.month}</TableCell>
-                    <TableCell className="actions">
-                      {/* Note: We don't have a delete endpoint for budgets in the backend, but we can add one if needed.
-                          For now, we'll just show that we can edit by resetting the form with this budget's data. */}
-                      <Button 
-                        variant="outline" 
-                        size="small"
-                        onClick={() => {
-                          setFormData({
-                            category_id: budget.category_id,
-                            monthly_limit: budget.monthly_limit,
-                            month: budget.month
-                          });
-                        }}
-                      >
-                        Edit
-                      </Button>
-                    </TableCell>
-                  </TableRow>
-                ))}
-              </TableBody>
-            </Table>
-          ) : (
-            <p className="no-data">No budgets set for this student and month.</p>
-          )}
-        </CardContent>
-      </Card>
-    </div>
+      <ConfirmDialog open={!!toDelete} onCancel={() => setToDelete(null)}
+        onConfirm={async () => {
+          try { await budgetsApi.remove(toDelete.id); toast('Budget removed', 'ok'); budgets.reload(); }
+          catch (e) { toast(apiError(e), 'bad'); }
+          finally { setToDelete(null); }
+        }}
+        title="Remove budget" confirmLabel="Remove"
+        body={toDelete ? `Remove the ${toDelete.category_name} budget for ${month}?` : ''} />
+    </>
   );
-};
-
-export default Budget;
+}

@@ -96,3 +96,25 @@ def add_or_update_budget(current_student):
             fetch_one=True
         )
         return jsonify(budget), 201
+
+
+@budgets_bp.route('/<int:budget_id>', methods=['DELETE'])
+@token_required
+def delete_budget(current_student, budget_id):
+    student_id = current_student['id']
+
+    existing = execute_query(
+        "SELECT id FROM budgets WHERE id = %s AND student_id = %s",
+        (budget_id, student_id),
+        fetch_one=True,
+    )
+    if existing is None:
+        return jsonify({"error": "Budget not found or unauthorized"}), 404
+
+    result = execute_query(
+        "DELETE FROM budgets WHERE id = %s", (budget_id,), commit=True
+    )
+    if result is None:
+        return jsonify({"error": "Failed to delete budget"}), 500
+
+    return jsonify({"message": "Budget deleted successfully"}), 200

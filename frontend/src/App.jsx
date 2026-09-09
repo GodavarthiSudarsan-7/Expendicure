@@ -1,45 +1,71 @@
 import React from 'react';
 import { BrowserRouter as Router, Routes, Route, Navigate } from 'react-router-dom';
 import { AuthProvider, useAuth } from './context/AuthContext';
-import Navbar from './components/Navbar';
+import { ToastProvider } from './components/ui';
+import AppShell from './components/AppShell';
+
 import Dashboard from './pages/Dashboard';
 import Transactions from './pages/Transactions';
 import AddTransaction from './pages/AddTransaction';
 import Budget from './pages/Budget';
-import Reports from './pages/Reports';
 import CategoryManager from './pages/CategoryManager';
+import Recurring from './pages/Recurring';
+import Forecast from './pages/Forecast';
+import Affordability from './pages/Affordability';
+import WhatIf from './pages/WhatIf';
+import Insights from './pages/Insights';
+import Ask from './pages/Ask';
+import Settings from './pages/Settings';
 import Login from './pages/Login';
 import Register from './pages/Register';
 
-const ProtectedRoute = ({ children }) => {
+function Protected({ children }) {
   const { user, loading } = useAuth();
-  if (loading) return <div>Loading...</div>;
-  if (!user) return <Navigate to="/login" />;
-  return children;
-};
+  if (loading) return <div className="shell-content"><div className="sk sk-chart" /></div>;
+  if (!user) return <Navigate to="/login" replace />;
+  return <AppShell>{children}</AppShell>;
+}
 
-function App() {
+function PublicOnly({ children }) {
+  const { user, loading } = useAuth();
+  if (loading) return null;
+  if (user) return <Navigate to="/" replace />;
+  return children;
+}
+
+const routes = [
+  ['/', Dashboard],
+  ['/transactions', Transactions],
+  ['/transactions/add', AddTransaction],
+  ['/budgets', Budget],
+  ['/recurring', Recurring],
+  ['/forecast', Forecast],
+  ['/affordability', Affordability],
+  ['/what-if', WhatIf],
+  ['/insights', Insights],
+  ['/ask', Ask],
+  ['/categories', CategoryManager],
+  ['/settings', Settings],
+];
+
+export default function App() {
   return (
     <AuthProvider>
-      <Router>
-        <div className="app">
-          <Navbar />
-          <main className="main-content">
-            <Routes>
-              <Route path="/login" element={<Login />} />
-              <Route path="/register" element={<Register />} />
-              <Route path="/" element={<ProtectedRoute><Dashboard /></ProtectedRoute>} />
-              <Route path="/transactions" element={<ProtectedRoute><Transactions /></ProtectedRoute>} />
-              <Route path="/transactions/add" element={<ProtectedRoute><AddTransaction /></ProtectedRoute>} />
-              <Route path="/budget" element={<ProtectedRoute><Budget /></ProtectedRoute>} />
-              <Route path="/reports" element={<ProtectedRoute><Reports /></ProtectedRoute>} />
-              <Route path="/categories" element={<ProtectedRoute><CategoryManager /></ProtectedRoute>} />
-            </Routes>
-          </main>
-        </div>
-      </Router>
+      <ToastProvider>
+        <Router>
+          <Routes>
+            <Route path="/login" element={<PublicOnly><Login /></PublicOnly>} />
+            <Route path="/register" element={<PublicOnly><Register /></PublicOnly>} />
+            {routes.map(([path, C]) => (
+              <Route key={path} path={path} element={<Protected><C /></Protected>} />
+            ))}
+            {/* legacy redirects */}
+            <Route path="/budget" element={<Navigate to="/budgets" replace />} />
+            <Route path="/reports" element={<Navigate to="/forecast" replace />} />
+            <Route path="*" element={<Navigate to="/" replace />} />
+          </Routes>
+        </Router>
+      </ToastProvider>
     </AuthProvider>
   );
 }
-
-export default App;

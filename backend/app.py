@@ -13,6 +13,16 @@ from routes.categories import categories_bp
 from routes.budgets import budgets_bp
 from routes.dashboard import dashboard_bp
 from routes.reports import reports_bp
+from routes.account import account_bp
+from routes.recurring import recurring_bp
+from routes.categorization_rules import categorization_rules_bp
+from routes.twin import twin_bp
+from routes.affordability import affordability_bp
+from routes.simulation import simulation_bp
+from routes.forecast import forecast_bp
+from routes.anomaly import anomaly_bp
+from routes.ai import ai_bp
+from routes.agent import agent_bp
 
 # Register blueprints
 app.register_blueprint(auth_bp, url_prefix='/api/auth')
@@ -22,10 +32,24 @@ app.register_blueprint(categories_bp, url_prefix='/api/categories')
 app.register_blueprint(budgets_bp, url_prefix='/api/budgets')
 app.register_blueprint(dashboard_bp, url_prefix='/api/dashboard')
 app.register_blueprint(reports_bp, url_prefix='/api/reports')
+app.register_blueprint(account_bp, url_prefix='/api/account')
+app.register_blueprint(recurring_bp, url_prefix='/api/recurring')
+app.register_blueprint(categorization_rules_bp, url_prefix='/api/categorization-rules')
+app.register_blueprint(twin_bp, url_prefix='/api/twin')
+app.register_blueprint(affordability_bp, url_prefix='/api/affordability')
+app.register_blueprint(simulation_bp, url_prefix='/api/simulation')
+app.register_blueprint(forecast_bp, url_prefix='/api/forecast')
+app.register_blueprint(anomaly_bp, url_prefix='/api/anomalies')
+app.register_blueprint(ai_bp, url_prefix='/api/ai')
+app.register_blueprint(agent_bp, url_prefix='/api/agent')
 
 @app.route('/')
 def home():
     return jsonify({"message": "Welcome to Expendicure API"})
+
+@app.route('/api/health')
+def health():
+    return jsonify({"status": "ok"})
 
 @app.errorhandler(404)
 def not_found(error):

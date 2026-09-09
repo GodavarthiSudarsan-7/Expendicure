@@ -1,188 +1,226 @@
-import React, { useState, useEffect } from 'react';
-import api from '../api/api';
-import { Card, CardHeader, CardTitle, CardContent } from '../components/ui/Card';
-import { Statistic, StatisticLabel, StatisticValue, StatisticTrend } from '../components/ui/Statistic';
-import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer } from 'recharts';
-import { PieChart, Pie, Cell } from 'recharts';
-import { Table, TableHeader, TableBody, TableRow, TableCell } from '../components/ui/Table';
-import { Button } from '../components/ui/Button';
+import React from 'react';
+import { Link } from 'react-router-dom';
+import {
+  AreaChart, Area, XAxis, YAxis, Tooltip, ResponsiveContainer, ReferenceLine, CartesianGrid,
+} from 'recharts';
+import { twinApi, forecastApi, anomaliesApi, transactionsApi } from '../api';
+import { useAsync } from '../hooks/useAsync';
+import { useAuth } from '../context/AuthContext';
+import {
+  Card, CardHead, CardBody, StatCard, Badge, Button, EmptyState, ErrorState,
+  Skeleton, SectionHeader, SkeletonCards,
+} from '../components/ui';
+import { money, signedMoney, dateTiny, dateShort, greeting, titleCase } from '../lib/format';
+import { deriveHealthStatus, anomalyMeta, severityTone } from '../lib/status';
 
-const COLORS = ['#0088FE', '#00C49F', '#FFBB28', '#FF8042', '#8884D8', '#82CA9D'];
+export default function Dashboard() {
+  const { user } = useAuth();
+  const twin = useAsync(() => twinApi.state(), []);
+  const forecast = useAsync(() => forecastApi.get({ horizonDays: 30 }), []);
+  const anomalies = useAsync(() => anomaliesApi.get(), []);
+  const txns = useAsync(() => transactionsApi.list(), []);
 
-const Dashboard = () => {
-  const [dashboardData, setDashboardData] = useState(null);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState(null);
+  const t = twin.data;
+  const f = forecast.data;
+  const health = deriveHealthStatus(t, f);
+  const nextCommitment = (t?.recurring || [])
+    .filter((r) => r.direction === 'debit' && r.active)
+    .sort((a, b) => (a.next_date > b.next_date ? 1 : -1))[0];
 
-  useEffect(() => {
-    fetchDashboardData();
-  }, []);
-
-  const fetchDashboardData = async () => {
-    setLoading(true);
-    setError(null);
-    try {
-      const response = await api.get(`/dashboard/summary`);
-      setDashboardData(response.data);
-    } catch (err) {
-      setError('Failed to load dashboard data');
-      console.error(err);
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  if (loading) return <div className="loading">Loading...</div>;
-  if (error) return <div className="error">{error}</div>;
-  if (!dashboardData) return <div>No data available</div>;
+  const chartData = (f?.projection || []).map((p) => ({ date: p.date, balance: parseFloat(p.balance) }));
+  const topInsights = (anomalies.data?.anomalies || [])
+    .slice()
+    .sort((a, b) => ({ high: 0, medium: 1, low: 2 }[a.severity] - { high: 0, medium: 1, low: 2 }[b.severity]))
+    .slice(0, 3);
 
   return (
-    <div className="dashboard">
-      <div className="dashboard-header">
-        <h1>Student Dashboard</h1>
-      </div>
-
-      <div className="stats-grid">
-        <Statistic>
-          <StatisticLabel>Total Balance</StatisticLabel>
-          <StatisticValue>${dashboardData.total_balance.toFixed(2)}</StatisticValue>
-        </Statistic>
-        
-        <Statistic>
-          <StatisticLabel>Monthly Spending</StatisticLabel>
-          <StatisticValue>${dashboardData.total_monthly_spending.toFixed(2)}</StatisticValue>
-          <StatisticTrend 
-            isPositive={dashboardData.total_monthly_spending < dashboardData.total_balance}
-          >
-            {"Under budget"}
-          </StatisticTrend>
-        </Statistic>
-        
-        <Statistic>
-          <StatisticLabel>Remaining Budget</StatisticLabel>
-          <StatisticValue>${dashboardData.remaining_budget.toFixed(2)}</StatisticValue>
-        </Statistic>
-      </div>
-
-      <div className="charts-grid">
-        <div className="chart-card">
-          <CardHeader>
-            <CardTitle>Category-wise Spending</CardTitle>
-          </CardHeader>
-          <CardContent>
-            <PieChart 
-              width={400} 
-              height={400}
-              data={dashboardData.category_wise_summary.map((item, index) => ({
-                name: item.category,
-                value: item.spent,
-                fill: COLORS[index % COLORS.length]
-              }))}
-            >
-              <Pie 
-                dataKey="value"
-                cx="50%"
-                cy="50%"
-                labelLine={false}
-                label={({ name, value, percent }) => (
-                  <text 
-                    x={0} 
-                    y={0} 
-                    textAnchor="middle" 
-                    dominantBaseline="middle"
-                    fontSize={12}
-                    fill="#fff"
-                  >
-                    {name}: {percent}%
-                  </text>
-                )}
-              >
-                {dashboardData.category_wise_summary.map((item, index) => (
-                  <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />
-                ))}
-              </Pie>
-            </PieChart>
-          </CardContent>
+    <>
+      <div className="page-head">
+        <div>
+          <div className="eyebrow">{greeting()}, {user?.name?.split(' ')[0] || 'there'}</div>
+          <h1>Here's your financial snapshot</h1>
+          <div className="sub">Every figure below comes straight from Expendicure's deterministic financial engine.</div>
         </div>
+        <div className="actions">
+          <Link to="/affordability" className="btn btn-secondary">Can I afford something?</Link>
+          <Link to="/what-if" className="btn btn-primary">Run a what-if</Link>
+        </div>
+      </div>
 
-        <div className="chart-card">
-          <CardHeader>
-            <CardTitle>Recent Transactions</CardTitle>
-          </CardHeader>
-          <CardContent>
-            {dashboardData.recent_transactions.length > 0 ? (
-              <Table>
-                <TableHeader>
-                  <TableRow>
-                    <TableCell>Date</TableCell>
-                    <TableCell>Merchant</TableCell>
-                    <TableCell>Category</TableCell>
-                    <TableCell>Amount</TableCell>
-                    <TableCell>Method</TableCell>
-                  </TableRow>
-                </TableHeader>
-                <TableBody>
-                  {dashboardData.recent_transactions.map((transaction, index) => (
-                    <TableRow key={transaction.id}>
-                      <TableCell>{transaction.payment_date}</TableCell>
-                      <TableCell>{transaction.merchant_name}</TableCell>
-                      <TableCell>{transaction.category_name}</TableCell>
-                      <TableCell>${transaction.amount}</TableCell>
-                      <TableCell>{transaction.payment_method || '-'}</TableCell>
-                    </TableRow>
-                  ))}
-                </TableBody>
-              </Table>
-            ) : (
-              <p className="no-data">No recent transactions</p>
+      {twin.error && <ErrorState message={twin.error} onRetry={twin.reload} />}
+
+      {twin.loading ? (
+        <SkeletonCards count={4} />
+      ) : t ? (
+        <div className="grid grid-4">
+          <StatCard
+            label="Current balance" tone="brand"
+            value={money(t.current_balance)}
+            meta={<>Opening {money(t.opening_balance)} · net {signedMoney(Math.abs(parseFloat(t.month_net)), parseFloat(t.month_net) >= 0 ? 'credit' : 'debit')} this month</>}
+          />
+          <StatCard
+            label="Discretionary buffer"
+            tone={parseFloat(t.discretionary_buffer) > 0 ? 'ok' : 'warn'}
+            value={money(t.discretionary_buffer)}
+            meta={<>After {money(t.committed_upcoming)} committed & {money(t.safety_buffer)} safety buffer</>}
+          />
+          <StatCard
+            label="Next commitment" tone="neutral"
+            value={nextCommitment ? money(nextCommitment.amount) : '—'}
+            meta={nextCommitment ? <>{nextCommitment.label} · {dateShort(nextCommitment.next_date)}</> : 'No upcoming commitments'}
+          />
+          <StatCard
+            label="30-day outlook"
+            tone={health.tone}
+            value={forecast.loading ? '…' : (f?.safety_buffer_breached ? 'Watch' : 'Healthy')}
+            meta={forecast.loading ? 'Forecasting…' : (
+              f?.safety_buffer_breached
+                ? <>Buffer reached {dateShort(f.breach_date)}</>
+                : <>Low point {money(f?.projected_min_balance)}</>
             )}
-          </CardContent>
+          />
         </div>
+      ) : null}
+
+      <div className="grid grid-2 mt-6" style={{ gridTemplateColumns: '1.6fr 1fr' }}>
+        <Card>
+          <CardHead right={<Link to="/forecast" className="btn btn-sm btn-ghost">Open forecast →</Link>}>
+            <h3>Projected balance · next 30 days</h3>
+          </CardHead>
+          <CardBody>
+            {forecast.loading ? (
+              <Skeleton className="sk-chart" />
+            ) : forecast.error ? (
+              <ErrorState message={forecast.error} onRetry={forecast.reload} />
+            ) : chartData.length ? (
+              <>
+                <div className="chart-box">
+                  <ResponsiveContainer>
+                    <AreaChart data={chartData} margin={{ top: 8, right: 8, left: 0, bottom: 0 }}>
+                      <defs>
+                        <linearGradient id="balFill" x1="0" y1="0" x2="0" y2="1">
+                          <stop offset="0%" stopColor="#6366f1" stopOpacity={0.28} />
+                          <stop offset="100%" stopColor="#6366f1" stopOpacity={0.02} />
+                        </linearGradient>
+                      </defs>
+                      <CartesianGrid stroke="#eef1f6" vertical={false} />
+                      <XAxis dataKey="date" tickFormatter={dateTiny} tick={{ fontSize: 11, fill: '#94a3b8' }}
+                        axisLine={false} tickLine={false} minTickGap={28} />
+                      <YAxis tick={{ fontSize: 11, fill: '#94a3b8' }} axisLine={false} tickLine={false}
+                        width={64} tickFormatter={(v) => money(v, { compact: true })} />
+                      <Tooltip formatter={(v) => money(v)} labelFormatter={dateShort} />
+                      <ReferenceLine y={parseFloat(f.safety_buffer)} stroke="#f59e0b" strokeDasharray="4 4"
+                        label={{ value: 'Safety buffer', position: 'insideTopLeft', fontSize: 11, fill: '#b45309' }} />
+                      {f.safety_buffer_breached && f.breach_date && (
+                        <ReferenceLine x={f.breach_date} stroke="#ef4444" strokeDasharray="3 3" />
+                      )}
+                      <Area type="monotone" dataKey="balance" stroke="#6366f1" strokeWidth={2.5} fill="url(#balFill)" />
+                    </AreaChart>
+                  </ResponsiveContainer>
+                </div>
+                <div className="legend-row">
+                  <span className="li"><span className="sw" style={{ background: '#6366f1' }} />Projected balance</span>
+                  <span className="li"><span className="sw" style={{ background: '#f59e0b' }} />Safety buffer</span>
+                  {f.safety_buffer_breached && <span className="li"><span className="sw" style={{ background: '#ef4444' }} />Buffer breach</span>}
+                  <span className="li muted">Confidence: {f.confidence}</span>
+                </div>
+              </>
+            ) : (
+              <EmptyState emoji="📈" title="Your forecast is still learning">
+                It becomes more accurate as Expendicure learns your recurring patterns.
+              </EmptyState>
+            )}
+          </CardBody>
+        </Card>
+
+        <Card>
+          <CardHead><h3>Financial health</h3></CardHead>
+          <CardBody>
+            {twin.loading ? <Skeleton style={{ height: 160 }} /> : (
+              <div className="center">
+                <div className={`badge badge-${health.tone}`} style={{ fontSize: '0.9rem', padding: '6px 14px' }}>
+                  {health.label}
+                </div>
+                <p className="soft mt-4">{health.note}</p>
+                <div className="kv mt-4" style={{ textAlign: 'left' }}>
+                  <span className="k">Current balance</span><span className="v tabular">{money(t?.current_balance)}</span>
+                </div>
+                <div className="kv" style={{ textAlign: 'left' }}>
+                  <span className="k">Safety buffer</span><span className="v tabular">{money(t?.safety_buffer)}</span>
+                </div>
+                <div className="kv" style={{ textAlign: 'left' }}>
+                  <span className="k">Discretionary buffer</span><span className="v tabular">{money(t?.discretionary_buffer)}</span>
+                </div>
+                <p className="muted mt-4" style={{ fontSize: '0.76rem' }}>
+                  Status is a visual mapping of deterministic backend fields — not an AI score.
+                </p>
+              </div>
+            )}
+          </CardBody>
+        </Card>
       </div>
 
-      <div className="category-summary">
-        <CardHeader>
-          <CardTitle>Category-wise Budget Summary</CardTitle>
-        </CardHeader>
-        <CardContent>
-          {dashboardData.category_wise_summary.length > 0 ? (
-            <Table>
-              <TableHeader>
-                <TableRow>
-                  <TableCell>Category</TableCell>
-                  <TableCell>Budget</TableCell>
-                  <TableCell>Spent</TableCell>
-                  <TableCell>Remaining</TableCell>
-                  <TableCell>Status</TableCell>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {dashboardData.category_wise_summary.map((item, index) => {
-                  const percentage = item.budget > 0 ? (item.spent / item.budget) * 100 : 0;
-                  const status = percentage >= 100 ? 'over' : percentage >= 80 ? 'warning' : 'good';
-                  return (
-                    <TableRow key={index} className={status}>
-                      <TableCell>{item.category}</TableCell>
-                      <TableCell>${item.budget}</TableCell>
-                      <TableCell>${item.spent}</TableCell>
-                      <TableCell>${item.budget - item.spent}</TableCell>
-                      <TableCell>
-                        <span className={`status-badge ${status}`}>
-                          {status === 'over' ? 'Over Budget' : status === 'warning' ? 'Warning' : 'On Track'}
-                        </span>
-                      </TableCell>
-                    </TableRow>
-                  );
-                })}
-              </TableBody>
-            </Table>
-          ) : (
-            <p className="no-data">No budget data available</p>
-          )}
-        </CardContent>
+      <div className="mt-6">
+        <SectionHeader title="Signals that need attention"
+          hint={anomalies.data ? `${anomalies.data.count} detected` : ''}
+          action={<Link to="/insights" className="btn btn-sm btn-ghost">All insights →</Link>} />
+        {anomalies.loading ? (
+          <div className="grid grid-3">{[0, 1, 2].map((i) => <Skeleton key={i} className="sk-card" />)}</div>
+        ) : topInsights.length ? (
+          <div className="grid grid-3">
+            {topInsights.map((a, i) => (
+              <div key={i} className="insight-card">
+                <div className="ic-top">
+                  <span className="ic-title">{anomalyMeta[a.type]?.emoji} {anomalyMeta[a.type]?.title || titleCase(a.type)}</span>
+                  <Badge tone={severityTone(a.severity)}>{a.severity}</Badge>
+                </div>
+                <div className="ic-lead">{a.reason}</div>
+                <Link to="/insights" className="btn btn-sm btn-secondary" style={{ alignSelf: 'flex-start' }}>View details</Link>
+              </div>
+            ))}
+          </div>
+        ) : (
+          <Card><CardBody>
+            <EmptyState emoji="✅" title="You're all clear">No unusual spending patterns detected.</EmptyState>
+          </CardBody></Card>
+        )}
       </div>
-    </div>
+
+      <div className="mt-6">
+        <Card>
+          <CardHead right={<Link to="/transactions" className="btn btn-sm btn-ghost">View all →</Link>}>
+            <h3>Recent transactions</h3>
+          </CardHead>
+          <CardBody className="card-body" style={{ padding: 0 }}>
+            {txns.loading ? (
+              <div style={{ padding: 20 }}><Skeleton className="sk-line" /><Skeleton className="sk-line" /><Skeleton className="sk-line" /></div>
+            ) : (txns.data || []).length ? (
+              <div className="table-wrap">
+                <table className="table">
+                  <thead><tr><th>Date</th><th>Merchant</th><th>Category</th><th style={{ textAlign: 'right' }}>Amount</th></tr></thead>
+                  <tbody>
+                    {(txns.data || []).slice(0, 6).map((tx) => (
+                      <tr key={tx.id}>
+                        <td className="nowrap">{dateShort(tx.payment_date)}</td>
+                        <td>{tx.merchant_name}</td>
+                        <td><Badge tone="neutral">{tx.category_name}</Badge></td>
+                        <td style={{ textAlign: 'right' }} className={tx.direction === 'credit' ? 'amount-pos' : 'amount-neg'}>
+                          {signedMoney(tx.amount, tx.direction)}
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            ) : (
+              <EmptyState emoji="🧾" title="No spending history yet"
+                action={<Link to="/transactions/add" className="btn btn-primary">Add your first transaction</Link>}>
+                Add your first transaction and Expendicure will start building your Financial Digital Twin.
+              </EmptyState>
+            )}
+          </CardBody>
+        </Card>
+      </div>
+    </>
   );
-};
-
-export default Dashboard;
+}

@@ -1,179 +1,83 @@
 import React, { useState } from 'react';
-import api from '../api/api';
-import { Card, CardHeader, CardTitle, CardContent } from '../components/ui/Card';
-import { Button } from '../components/ui/Button';
-import { Input } from '../components/ui/Input';
-import { Select } from '../components/ui/Select';
+import { useNavigate } from 'react-router-dom';
+import { transactionsApi, categoriesApi, apiError } from '../api';
+import { useAsync } from '../hooks/useAsync';
+import { Card, CardHead, CardBody, Field, Input, Select, Button, MoneyInput, Alert, useToast } from '../components/ui';
+import { todayIso } from '../lib/format';
 
-const AddTransaction = () => {
-  const [formData, setFormData] = useState({
-    amount: '',
-    merchant_name: '',
-    category_id: '',
-    payment_date: '',
-    payment_method: '',
-    notes: ''
-  });
-  const [categories, setCategories] = useState([]);
-  const [loading, setLoading] = useState(false);
-  const [error, setError] = useState(null);
-  const [success, setSuccess] = useState(null);
+const empty = {
+  amount: '', direction: 'debit', merchant_name: '', category_id: '',
+  payment_date: todayIso(), payment_method: '', notes: '',
+};
 
-  // Fetch categories when component mounts
-  React.useEffect(() => {
-    fetchCategories();
-  }, []);
+export default function AddTransaction() {
+  const nav = useNavigate();
+  const toast = useToast();
+  const cats = useAsync(() => categoriesApi.list(), []);
+  const [form, setForm] = useState(empty);
+  const [busy, setBusy] = useState(false);
+  const [err, setErr] = useState(null);
+  const set = (k) => (e) => setForm((f) => ({ ...f, [k]: e.target.value }));
 
-  const fetchCategories = async () => {
-    try {
-      const response = await api.get('/categories');
-      setCategories(response.data);
-    } catch (err) {
-      console.error('Failed to fetch categories:', err);
-    }
-  };
-
-  const handleChange = (e) => {
-    const { name, value } = e.target;
-    setFormData(prev => ({
-      ...prev,
-      [name]: value
-    }));
-  };
-
-  const handleSubmit = async (e) => {
+  const submit = async (e) => {
     e.preventDefault();
-    setLoading(true);
-    setError(null);
-    setSuccess(null);
+    setErr(null);
+    if (!form.amount || parseFloat(form.amount) <= 0) return setErr('Enter an amount greater than 0.');
+    if (!form.category_id) return setErr('Choose a category.');
+    setBusy(true);
     try {
-      const response = await api.post('/transactions', {
-        ...formData
-      });
-      setSuccess('Transaction added successfully!');
-      // Reset form
-      setFormData({
-        amount: '',
-        merchant_name: '',
-        category_id: '',
-        payment_date: '',
-        payment_method: '',
-        notes: ''
-      });
-    } catch (err) {
-      setError('Failed to add transaction');
-      console.error(err);
-    } finally {
-      setLoading(false);
-    }
+      await transactionsApi.create({ ...form });
+      toast('Transaction added', 'ok');
+      nav('/transactions');
+    } catch (e2) { setErr(apiError(e2)); }
+    finally { setBusy(false); }
   };
 
   return (
-    <div className="add-transaction-page">
-      <div className="page-header">
-        <h1>Add Transaction</h1>
+    <>
+      <div className="page-head">
+        <div><div className="eyebrow">New entry</div><h1>Add transaction</h1></div>
       </div>
-
-      {success && <div className="alert alert-success">{success}</div>}
-      {error && <div className="alert alert-error">{error}</div>}
-
-      <Card>
-        <CardHeader>
-          <CardTitle>Transaction Details</CardTitle>
-        </CardHeader>
-        <CardContent>
-          <form onSubmit={handleSubmit}>
-            <div className="form-group">
-              <label htmlFor="amount">Amount ($)</label>
-              <Input
-                type="number"
-                name="amount"
-                value={formData.amount}
-                onChange={handleChange}
-                required
-                step="0.01"
-                min="0"
-              />
+      <Card style={{ maxWidth: 620 }}>
+        <CardHead><h3>Details</h3></CardHead>
+        <CardBody>
+          <form onSubmit={submit}>
+            <div className="form-row">
+              <Field label="Amount"><MoneyInput value={form.amount} onChange={set('amount')} autoFocus /></Field>
+              <Field label="Type">
+                <Select value={form.direction} onChange={set('direction')}>
+                  <option value="debit">Expense (money out)</option>
+                  <option value="credit">Income (money in)</option>
+                </Select>
+              </Field>
             </div>
-
-            <div className="form-group">
-              <label htmlFor="merchant_name">Merchant Name</label>
-              <Input
-                type="text"
-                name="merchant_name"
-                value={formData.merchant_name}
-                onChange={handleChange}
-                required
-              />
+            <Field label="Merchant"><Input value={form.merchant_name} onChange={set('merchant_name')} required /></Field>
+            <div className="form-row">
+              <Field label="Category">
+                <Select value={form.category_id} onChange={set('category_id')} required>
+                  <option value="">Select…</option>
+                  {(cats.data || []).map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}
+                </Select>
+              </Field>
+              <Field label="Date"><Input type="date" value={form.payment_date} onChange={set('payment_date')} required /></Field>
             </div>
-
-            <div className="form-group">
-              <label htmlFor="category_id">Category</label>
-              <Select
-                name="category_id"
-                value={formData.category_id}
-                onChange={handleChange}
-                required
-              >
-                <option value="">Select a category</option>
-                {categories.map(category => (
-                  <option key={category.id} value={category.id}>
-                    {category.name}
-                  </option>
-                ))}
-              </Select>
+            <div className="form-row">
+              <Field label="Payment method">
+                <Select value={form.payment_method} onChange={set('payment_method')}>
+                  <option value="">—</option>
+                  {['UPI', 'Credit Card', 'Debit Card', 'Cash', 'Bank Transfer', 'Other'].map((m) => <option key={m}>{m}</option>)}
+                </Select>
+              </Field>
+              <Field label="Notes"><Input value={form.notes} onChange={set('notes')} placeholder="Optional" /></Field>
             </div>
-
-            <div className="form-group">
-              <label htmlFor="payment_date">Payment Date</label>
-              <Input
-                type="date"
-                name="payment_date"
-                value={formData.payment_date}
-                onChange={handleChange}
-                required
-              />
-            </div>
-
-            <div className="form-group">
-              <label htmlFor="payment_method">Payment Method</label>
-              <Select
-                name="payment_method"
-                value={formData.payment_method}
-                onChange={handleChange}
-              >
-                <option value="">Select payment method</option>
-                <option value="Credit Card">Credit Card</option>
-                <option value="Debit Card">Debit Card</option>
-                <option value="Cash">Cash</option>
-                <option value="Bank Transfer">Bank Transfer</option>
-                <option value="Other">Other</option>
-              </Select>
-            </div>
-
-            <div className="form-group">
-              <label htmlFor="notes">Notes (optional)</label>
-              <Input
-                type="text"
-                name="notes"
-                value={formData.notes}
-                onChange={handleChange}
-              />
-            </div>
-
-            <div className="form-actions">
-              <Button type="submit" loading={loading}>
-                Add Transaction
-              </Button>
-              <Button type="button" variant="outline">
-                Cancel
-              </Button>
+            {err && <Alert tone="bad">{err}</Alert>}
+            <div className="row gap-2">
+              <Button type="submit" loading={busy}>Add transaction</Button>
+              <Button variant="ghost" type="button" onClick={() => nav('/transactions')}>Cancel</Button>
             </div>
           </form>
-        </CardContent>
+        </CardBody>
       </Card>
-    </div>
+    </>
   );
-};
-
-export default AddTransaction;
+}
