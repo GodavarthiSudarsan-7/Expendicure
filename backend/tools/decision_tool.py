@@ -3,6 +3,7 @@ from datetime import date
 from decision import build_alternatives, evaluate_consequence
 from tools.base import Tool, ToolResult
 from tools._twin import twin_for
+from tools._goals import goals_for
 
 
 class EvaluateFinancialDecisionTool(Tool):
@@ -22,12 +23,15 @@ class EvaluateFinancialDecisionTool(Tool):
         "description": {"type": "string", "max_len": 120},
         "merchant": {"type": "string", "max_len": 80},
         "purchase_date": {"type": "iso_date"},
+        "goal_id": {"type": "int_range", "min": 1, "max": 100_000_000},
     }
 
     def run(self, ctx, args):
         twin = twin_for(ctx)
+        goals = goals_for(ctx)
         pdate = date.fromisoformat(args["purchase_date"]) if args.get("purchase_date") else None
         description = args.get("description") or args.get("merchant")
+        goal_id = args.get("goal_id")
 
         result = evaluate_consequence(
             twin,
@@ -35,10 +39,13 @@ class EvaluateFinancialDecisionTool(Tool):
             category=args.get("category"),
             description=description,
             purchase_date=pdate,
+            goals=goals,
+            goal_id=goal_id,
         )
         alternatives = build_alternatives(
             twin, base=result, amount=args["amount"],
             category=args.get("category"), description=description,
+            goals=goals, goal_id=goal_id,
         )
 
         data = {**result.to_dict(), "alternatives": [a.to_dict() for a in alternatives]}
@@ -63,6 +70,8 @@ class EvaluateFinancialDecisionTool(Tool):
             "risk_after": data["risk_after"],
             "risk_change": data["risk_change"],
             "goal_impact": data["goal_impact"],
+            "goal_delay_days": data["goal_delay_days"],
+            "goal_delay_months": data["goal_delay_months"],
             "recommended_wait_days": data["recommended_wait_days"],
             "reason_codes": data["reason_codes"],
             "alternatives": [

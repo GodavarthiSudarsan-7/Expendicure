@@ -22,6 +22,11 @@ MATCH_CONTAINS = "contains"
 MATCH_EQUALS = "equals"
 MATCH_TYPES = (MATCH_CONTAINS, MATCH_EQUALS)
 
+GOAL_ACTIVE = "active"
+GOAL_ARCHIVED = "archived"
+GOAL_ACHIEVED = "achieved"
+GOAL_STATUSES = (GOAL_ACTIVE, GOAL_ARCHIVED, GOAL_ACHIEVED)
+
 
 @dataclass(frozen=True)
 class Account:
@@ -87,3 +92,23 @@ class Category:
     name: str
     is_default: bool
     student_id: Optional[int] = None  # None => global default category
+
+
+@dataclass(frozen=True)
+class SavingsGoal:
+    """A student's savings target. ``current_amount`` is the saved-so-far pot
+    (kept <= ``target_amount``); ``monthly_contribution`` is the planned
+    per-month top-up used to project completion. All money is ``Decimal``."""
+    id: int
+    student_id: int
+    name: str
+    target_amount: Decimal
+    current_amount: Decimal
+    monthly_contribution: Decimal
+    target_date: date
+    status: str = GOAL_ACTIVE  # "active" | "archived" | "achieved"
+
+    @property
+    def remaining_amount(self) -> Decimal:
+        gap = self.target_amount - self.current_amount
+        return gap if gap > 0 else Decimal("0.00")

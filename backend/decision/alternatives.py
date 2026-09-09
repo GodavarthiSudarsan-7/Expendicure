@@ -24,6 +24,7 @@ class Alternative:
     decision: str
     minimum_balance_after: Decimal
     safe: bool                       # min stays at/above the safety buffer
+    goal_delay_months: Optional[int] = None   # goal delay this alternative causes
 
     def to_dict(self) -> dict:
         return {
@@ -34,11 +35,22 @@ class Alternative:
             "decision": self.decision,
             "minimum_balance_after": str(self.minimum_balance_after),
             "safe": self.safe,
+            "goal_delay_months": self.goal_delay_months,
         }
 
 
-def build_alternatives(twin, *, base, amount, category=None, description=None) -> List[Alternative]:
-    """``base`` is the :class:`ConsequenceResult` for buying the full amount now."""
+def _goal_delay(result) -> Optional[int]:
+    gi = getattr(result, "goal_impact", None)
+    return gi.delay_months if (gi is not None and gi.available) else None
+
+
+def build_alternatives(twin, *, base, amount, category=None, description=None,
+                       goals=None, goal_id=None) -> List[Alternative]:
+    """``base`` is the :class:`ConsequenceResult` for buying the full amount now.
+
+    ``goals`` is forwarded to every re-score so each alternative reports its own
+    deterministic goal delay.
+    """
     alts: List[Alternative] = [
         Alternative(
             kind="buy_now",
@@ -48,6 +60,7 @@ def build_alternatives(twin, *, base, amount, category=None, description=None) -
             decision=base.decision,
             minimum_balance_after=base.minimum_balance_after,
             safe=(not base.buffer_breached_after) and base.safe_to_spend,
+            goal_delay_months=_goal_delay(base),
         )
     ]
 
@@ -55,6 +68,7 @@ def build_alternatives(twin, *, base, amount, category=None, description=None) -
         waited = evaluate_consequence(
             twin, amount=amount, category=category, description=description,
             purchase_date=base.purchase_date + timedelta(days=base.recommended_wait_days),
+            goals=goals, goal_id=goal_id,
         )
         alts.append(Alternative(
             kind="wait",
@@ -64,12 +78,13 @@ def build_alternatives(twin, *, base, amount, category=None, description=None) -
             decision=waited.decision,
             minimum_balance_after=waited.minimum_balance_after,
             safe=not waited.buffer_breached_after,
+            goal_delay_months=_goal_delay(waited),
         ))
 
     if base.largest_safe_amount is not None and base.largest_safe_amount < base.amount:
         smaller = evaluate_consequence(
             twin, amount=base.largest_safe_amount, category=category, description=description,
-            purchase_date=base.purchase_date,
+            purchase_date=base.purchase_date, goals=goals, goal_id=goal_id,
         )
         alts.append(Alternative(
             kind="spend_less",
@@ -79,6 +94,7 @@ def build_alternatives(twin, *, base, amount, category=None, description=None) -
             decision=smaller.decision,
             minimum_balance_after=smaller.minimum_balance_after,
             safe=not smaller.buffer_breached_after,
+            goal_delay_months=_goal_delay(smaller),
         ))
 
     return alts

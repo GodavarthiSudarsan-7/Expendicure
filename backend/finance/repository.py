@@ -24,9 +24,11 @@ from finance.models import (
     CategorizationRule,
     Category,
     RecurringTransaction,
+    SavingsGoal,
     Transaction,
     CREDIT,
     DEBIT,
+    GOAL_ACTIVE,
 )
 from finance.money import money, to_decimal, ZERO
 
@@ -195,6 +197,51 @@ class FinanceRepository:
             )
             for row in rows
         ]
+
+    # ----------------------------------------------------------- savings goals
+    def get_savings_goals(
+        self, student_id: int, *, status: Optional[str] = GOAL_ACTIVE
+    ) -> List[SavingsGoal]:
+        """The student's savings goals. ``status=None`` returns every status;
+        otherwise only rows with that status. Ownership is always scoped by
+        ``student_id`` — a goal is never returned for another student."""
+        sql = (
+            "SELECT id, student_id, name, target_amount, current_amount, "
+            "       monthly_contribution, target_date, status "
+            "FROM savings_goals WHERE student_id = %s"
+        )
+        params = [student_id]
+        if status is not None:
+            sql += " AND status = %s"
+            params.append(status)
+        sql += " ORDER BY target_date, id"
+
+        rows = self._query(sql, tuple(params)) or []
+        return [self._goal_from_row(row) for row in rows]
+
+    def get_savings_goal(self, student_id: int, goal_id: int) -> Optional[SavingsGoal]:
+        """One goal by id, but only if it belongs to ``student_id``."""
+        row = self._query(
+            "SELECT id, student_id, name, target_amount, current_amount, "
+            "       monthly_contribution, target_date, status "
+            "FROM savings_goals WHERE id = %s AND student_id = %s",
+            (goal_id, student_id),
+            one=True,
+        )
+        return self._goal_from_row(row) if row else None
+
+    @staticmethod
+    def _goal_from_row(row) -> SavingsGoal:
+        return SavingsGoal(
+            id=row["id"],
+            student_id=row["student_id"],
+            name=row["name"],
+            target_amount=money(row["target_amount"]),
+            current_amount=money(row["current_amount"]),
+            monthly_contribution=money(row["monthly_contribution"]),
+            target_date=_as_date(row["target_date"]),
+            status=row.get("status") or GOAL_ACTIVE,
+        )
 
     # ----------------------------------------------------------------- balance
     def compute_current_balance(

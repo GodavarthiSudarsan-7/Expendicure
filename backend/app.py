@@ -23,6 +23,7 @@ from routes.forecast import forecast_bp
 from routes.anomaly import anomaly_bp
 from routes.ai import ai_bp
 from routes.agent import agent_bp
+from routes.goals import goals_bp
 
 # Register blueprints
 app.register_blueprint(auth_bp, url_prefix='/api/auth')
@@ -42,6 +43,7 @@ app.register_blueprint(forecast_bp, url_prefix='/api/forecast')
 app.register_blueprint(anomaly_bp, url_prefix='/api/anomalies')
 app.register_blueprint(ai_bp, url_prefix='/api/ai')
 app.register_blueprint(agent_bp, url_prefix='/api/agent')
+app.register_blueprint(goals_bp, url_prefix='/api/goals')
 
 @app.route('/')
 def home():

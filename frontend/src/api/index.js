@@ -96,3 +96,15 @@ export const agentApi = {
   chat: (message, conversationId) =>
     post('/agent/chat', { message, ...(conversationId ? { conversation_id: conversationId } : {}) }),
 };
+
+/* ---- Savings goals (Phase 13) — the API surface only; goal progress,
+   goal impact and recovery numbers are all computed by the backend. React
+   only renders what the agent / these endpoints return. ---- */
+export const goalsApi = {
+  list: (status) => get('/goals', status ? { status } : undefined),
+  get: (id) => get(`/goals/${id}`),
+  create: (payload) => post('/goals', payload),
+  update: (id, payload) => put(`/goals/${id}`, payload),
+  remove: (id) => del(`/goals/${id}`),
+  archive: (id) => del(`/goals/${id}?archive=1`),
+};

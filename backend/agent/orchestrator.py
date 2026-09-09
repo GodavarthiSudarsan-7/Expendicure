@@ -93,7 +93,7 @@ class Herman:
         # --- Stage 2b: optional RAG enrichment (best-effort, never required) ---
         knowledge = None
         if (tool_result is not None and tool_result.ok
-                and plan.intent in ("DECISION", "AFFORDABILITY", "WHAT_IF")):
+                and plan.intent in ("DECISION", "AFFORDABILITY", "WHAT_IF", "RECOVERY")):
             knowledge = _retrieve_knowledge(message)
 
         # --- Stage 3: respond ---
@@ -124,6 +124,11 @@ class Herman:
         if knowledge:
             data["knowledge_used"] = [{"title": k["title"], "source": k["source"]} for k in knowledge]
 
+        ai_meta = {"available": True, "guard": guard_meta}
+        signals = _signals(plan, tool_result if tool_ok else None)
+        if signals:
+            ai_meta["signals"] = signals
+
         resp = AgentResponse(
             text=text,
             intent=plan.intent,
@@ -131,7 +136,7 @@ class Herman:
             data=data,
             suggested_actions=_suggested_actions(plan, tool_result),
             conversation_id=conv["id"],
-            ai={"available": True, "guard": guard_meta},
+            ai=ai_meta,
         )
         convo.append(conv, "herman", resp.text)
         return resp
@@ -155,6 +160,26 @@ def _retrieve_knowledge(query, k=2):
     except Exception:
         pass
     return None
+
+
+def _signals(plan, tool_result):
+    """Minimal, non-authoritative observability (Part R). Never exposes prompts,
+    model output or internals — only which deterministic paths ran."""
+    if tool_result is None:
+        return {}
+    data = tool_result.data if isinstance(tool_result.data, dict) else {}
+    out = {}
+    if plan.tool == "evaluate_recovery_plan":
+        out["recovery_used"] = True
+        gi = data.get("goal_impact") or {}
+        out["goal_impact_available"] = bool(gi.get("available"))
+    elif plan.tool == "get_savings_goals":
+        out["goal_used"] = True
+        out["goal_count"] = int(data.get("count") or 0)
+    elif plan.tool == "evaluate_financial_decision":
+        gi = data.get("goal_impact") or {}
+        out["goal_impact_available"] = bool(gi.get("available"))
+    return out
 
 
 def _suggested_actions(plan, tool_result):
@@ -184,6 +209,24 @@ def _suggested_actions(plan, tool_result):
              "message": "How does that apply to my situation right now?"},
             {"label": "Open dashboard", "action": "navigate", "to": "/"},
         ]
+
+    if intent == "GOAL_QUERY" and ok:
+        return [
+            {"label": "How much should I save monthly?", "action": "ask",
+             "message": "How much should I contribute each month to stay on track?"},
+            {"label": "Will a purchase delay this?", "action": "ask",
+             "message": "Will buying something for ₹5000 delay my goal?"},
+        ]
+
+    if intent == "RECOVERY" and ok:
+        actions = []
+        for opt in (s.get("options") or [])[:2]:
+            if opt.get("feasible"):
+                actions.append({"label": opt.get("label", "See this option")[:48], "action": "ask",
+                                "message": f"Tell me more about: {opt.get('label')}"})
+        actions.append({"label": "Show my forecast", "action": "ask",
+                        "message": "What will my balance look like at the end of the month?"})
+        return actions[:4]
 
     if intent == "AFFORDABILITY" and ok:
         try:

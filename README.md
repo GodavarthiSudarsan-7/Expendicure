@@ -220,6 +220,14 @@ from the token — endpoints do **not** accept a `student_id` parameter.
 - PUT `/api/recurring/<id>` - Update fields (partial)
 - DELETE `/api/recurring/<id>` - Delete
 
+### Savings goals (Phase 13)
+- GET `/api/goals?status=active` - The authenticated student's savings goals (ownership-scoped; another student's goal is never returned)
+- GET `/api/goals/<id>` - One goal, only if it belongs to you (else 404)
+- POST `/api/goals` - Create (`name`, `target_amount` > 0, `current_amount` >= 0, `monthly_contribution` >= 0, `target_date`; no overfunding — `current_amount <= target_amount`). A `student_id` in the body is ignored.
+- PUT `/api/goals/<id>` - Partial update (same validation; 404 if not yours)
+- DELETE `/api/goals/<id>` - Delete, or `?archive=1` to set `status = archived`
+- Goal **progress**, **impact** and **recovery** figures are never computed here — they come from `decision/goal_progress.py`, `decision/goal_impact.py` and `decision/recovery.py` via Herman's `get_savings_goals` / `evaluate_recovery_plan` tools.
+
 ### Categorization rules
 - GET `/api/categorization-rules` - Global default rules + the student's own
 - POST `/api/categorization-rules` - Create a personal rule (`match_type` contains|equals, `pattern`, `category_id`, `priority`)
@@ -434,6 +442,134 @@ model call and runs in well under a millisecond.
 imports only the standard library (`re`, `decimal`, `dataclasses`) — no
 `finance`, `finance_db`, `database`, Flask or Ollama — so the layering
 `finance ← {decision, tools, knowledge} ← agent ← routes` is unchanged.
+
+## Savings Goals & Recovery Mode (Phase 13)
+
+The final intelligence loop:
+
+```
+GOAL  ->  SPENDING DECISION  ->  CONSEQUENCE  ->  GOAL IMPACT  ->  RECOVERY PLAN  ->  NEW PROJECTION
+```
+
+### Savings goals (data model + CRUD)
+
+`006_savings_goals.sql` adds a `savings_goals` table — `student_id` (FK,
+`ON DELETE CASCADE`), `name`, `target_amount`, `current_amount` (the
+saved-so-far pot, kept `<= target_amount`), `monthly_contribution`,
+`target_date`, `status` (`active` / `archived` / `achieved`) — following the
+same conventions as `accounts` / `recurring_transactions`.
+
+- `GET/POST /api/goals`, `GET/PUT/DELETE /api/goals/<id>` (`?archive=1` to
+  archive instead of delete). **Ownership is enforced on every row** via
+  `student_id` from `token_required`; another student's goal is a 404 for
+  everyone else and is never returned, updated or deleted. A `student_id` in
+  the request body is ignored. Validation: `target_amount > 0`,
+  `current_amount >= 0`, `monthly_contribution >= 0`, valid `target_date`,
+  non-empty name, no overfunding (`current_amount <= target_amount`). `Decimal`
+  throughout.
+- `FinanceRepository.get_savings_goals` / `get_savings_goal` are **read-only**;
+  the agent and the decision engines only read goals — they never write them.
+
+### Goal progress engine — `decision/goal_progress.py`
+
+`compute_goal_progress(goal, as_of=…)` → remaining, percent complete (2dp),
+`months_to_target` = `ceil(remaining / monthly_contribution)`,
+`estimated_completion_date`, `months_until_target_date`,
+`required_monthly_contribution` to hit the target date, `contribution_gap`,
+`on_track` (planned finish within a 15-day grace of the target date), and a
+`status` (`on_track` / `behind` / `achieved` / `unknown`). Pure `Decimal`
+arithmetic — a goal is a linear top-up model, no projection kernel needed.
+When a field can't be computed (no contribution, zero target) it is `null`
+with a reason; **nothing is fabricated**.
+
+### Goal impact — `decision/goal_impact.py` (upgraded)
+
+A discretionary spend is money that would otherwise reach a goal — it doesn't
+touch the saved pot, it slips the *timeline*:
+
+```
+remaining_after = max(0, target - current) + amount
+months_before   = ceil(remaining_before / monthly_contribution)
+months_after    = ceil(remaining_after  / monthly_contribution)
+delay_months    = months_after - months_before
+delay_days      = est_completion_after - est_completion_before   (exact dates)
+```
+
+It also reports where the goal lands **by its target date** with vs without the
+spend (`projected_at_target_before/after`, `shortfall_at_target`). Primary goal
+(when no `goal_id` given): the `active` goal with a positive contribution and
+the **earliest `target_date`** (tie-break lowest id). No goals, or no funded
+goal → `available: false` with the historic reason string — so callers that
+pass nothing get the exact Phase 10 behaviour.
+
+### Goal-aware Consequence Engine — the decision rule
+
+`evaluate_consequence(twin, …, goals=…, goal_id=…)`. **A goal never changes the
+core decision**, which is driven only by balance / safety buffer / risk. The
+one documented exception (`GOAL_ESCALATE_DELAY_MONTHS = 3`): a decision that
+would otherwise be a clean **BUY** (buffer fine, risk unchanged) is escalated
+to **SPEND_LESS** if the purchase deterministically sets a real, funded goal
+back by **3 or more whole months** — reason code `delays_goal_significantly`,
+plus a goal-safe `largest_safe_amount`. Nothing else about a goal alters the
+decision. Reason codes gained `delays_goal_by_N_months` / `goal_unaffected`
+(replacing `goal_impact_unavailable` when a goal is present); each alternative
+carries its own `goal_delay_months`.
+
+### Recovery Mode — `decision/recovery.py`
+
+`evaluate_recovery(twin, amount=…, spent_date=…, goals=…)` — "I already spent
+it, how do I get back on track?" The spend is modelled as a **shock** on the
+current twin:
+
+```
+CURRENT STATE -> project_daily_balances(twin)                       (no shock)
+NEW BASELINE  -> project_daily_balances(twin, [shock])              (shock, no recovery)
+RECOVERY OPT  -> project_daily_balances(twin, [shock, +recovery])   (shock + one option)
+COMPARE       -> min balance / risk with vs without the option; rank.
+```
+
+`gap = max(0, safety_buffer − projected_min_after_spend)`. If `gap <= 0` →
+`needed: false`. Otherwise it generates deterministic options, **each
+re-projected through the same shared kernel**:
+
+| option | mechanic | never does |
+|---|---|---|
+| `reduce_discretionary` | trim `X`/month for N months, capped at this month's discretionary spend | cut more than you spend |
+| `spread_recovery` | set aside `gap/W` per week for W weeks, capped at ~¼ of monthly discretionary | recommend a weekly amount you can't make |
+| `delay_planned_expense` | push the soonest upcoming recurring **debit** ~30 days (still paid, one cycle later) | drop a bill |
+| `pause_goal_contribution` | redirect one month's goal contribution to the buffer (delays that goal ~1 month) | appear when there's no funded goal |
+| `wait_before_purchases` | avoid discretionary spending for N days so **known** income + time restore the buffer | invent income |
+
+Options are ranked feasible-and-restoring first, then least goal disruption,
+least money, shortest duration. `recommended` is the top one (or `null` if
+nothing fully rebuilds the buffer in time — then the closest partial option is
+still reported). Recovery is **read-only** — it never mutates the twin or the
+database; simulating a recovery writes nothing.
+
+### Tools, Herman, and the Number Guard
+
+Two new registered tools (11 total): **`get_savings_goals`** (goal + progress,
+for "how is my laptop goal", "how much should I save next month", "am I on
+track") and **`evaluate_recovery_plan`** ("I already spent 5000, how do I
+recover"). Both take identity from `ctx.user_id` only and reject identity keys
+in arguments. New planner intents `GOAL_QUERY` and `RECOVERY`; "will buying X
+delay my goal" stays a `DECISION` (that tool now reports goal impact itself).
+
+The **Phase 12 Number Guard is unchanged and still governs every figure** —
+its authoritative-value walk is data-shape agnostic, so goal targets, saved
+amounts, delay days, `required_monthly_contribution`, and every recovery
+figure are authorised straight from `ToolResult.data`. A fabricated goal
+balance, a "goal complete with ₹1 crore" injection, or a made-up recovery
+amount trips the guard and Herman falls back to the deterministic explanation.
+Goal state is fetched fresh by the deterministic tools on every turn and is
+never cached in `AgentContext`, so a stale conversation message can never
+override current goal state. `ai.signals` carries minimal observability
+(`goal_used`, `goal_impact_available`, `recovery_used`) — no prompts, no model
+output.
+
+`decision/` still imports only `finance` + stdlib; Phase 13 adds **no**
+dependencies and **no** financial-table writes from the agent, tools, or the
+decision engines.
 
 ## AI agent architecture (planned)
 

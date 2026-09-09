@@ -101,6 +101,7 @@ def deterministic_plan(message, ctx, registry) -> Plan:
             "simulate_expense": "WHAT_IF",
             "check_affordability": "AFFORDABILITY",
             "evaluate_financial_decision": "DECISION",
+            "evaluate_recovery_plan": "RECOVERY",
         }
         if prev in _intent_for:
             return Plan(intent=_intent_for[prev], tool=prev, arguments=args, ok=True,
@@ -114,11 +115,26 @@ def deterministic_plan(message, ctx, registry) -> Plan:
         return Plan(intent="KNOWLEDGE", tool="retrieve_financial_knowledge",
                     arguments={"query": (message or "")[:200]}, ok=True, note="deterministic")
 
+    # "I already spent X, how do I recover" -> Recovery Mode
+    if amount and re.search(
+        r"\b(already (spent|paid|bought|blew)|i (just )?spent|i overspent|"
+        r"blew (₹|rs|inr)?\s*\d|how (do|can) i (recover|bounce back|fix this|make up)|"
+        r"get back on track|recover from|damage control|undo this spend)\b", text
+    ):
+        args = {"amount": amount}
+        desc = _merchant(message)
+        if desc:
+            args["description"] = desc
+        return Plan(intent="RECOVERY", tool="evaluate_recovery_plan", arguments=args, ok=True,
+                    note="deterministic")
+
     # purchase-consequence question -> the Consequence Engine
+    # (checked before GOAL_QUERY so "will buying X delay my goal" stays a DECISION)
     if amount and re.search(
         r"\b(should i (buy|get|purchase)|can i buy|worth (buying|getting|it)|"
         r"what (would |will )?happens?( to| if)|impact (on|my) (savings|future|buffer|finances)|"
         r"before (i )?(buy|spend)|should i wait|hurt(ing)? my (savings|buffer)|"
+        r"will (buying|getting)|delay my (goal|laptop|target|savings?)|"
         r"buy .* for)\b", text
     ):
         args = {"amount": amount}
@@ -126,6 +142,19 @@ def deterministic_plan(message, ctx, registry) -> Plan:
         if desc:
             args["description"] = desc
         return Plan(intent="DECISION", tool="evaluate_financial_decision", arguments=args, ok=True,
+                    note="deterministic")
+
+    # savings-goal status / planning question -> deterministic goal tool
+    if re.search(r"\bgoals?\b", text) or re.search(
+        r"\b(on track (for|to)|how much (more )?do i need|how much (should|to) i save|"
+        r"(how much|what) should i (save|contribute|put aside)|"
+        r"monthly (saving|contribution)|save (next month|per month|each month|monthly))\b", text
+    ):
+        args = {}
+        gm = re.search(r"\b(?:my|the|for|toward[s]?|reach)\s+([a-z][a-z0-9 &'\-]{1,30}?)\s+(?:goal|target)\b", text)
+        if gm:
+            args["name"] = gm.group(1).strip()
+        return Plan(intent="GOAL_QUERY", tool="get_savings_goals", arguments=args, ok=True,
                     note="deterministic")
 
     if re.search(r"\b(anomal|unusual|suspicious|spike|weird|watch this month|flag|stood out)\b", text):

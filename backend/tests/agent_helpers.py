@@ -22,7 +22,7 @@ class FakeRepo:
     """Opening 10000, a handful of debits, one recurring rent, one Food budget."""
 
     def __init__(self, *, opening="10000.00", buffer="2000.00", transactions=None,
-                 budgets=None, recurring=None, categories=None):
+                 budgets=None, recurring=None, categories=None, savings_goals=None):
         self.account = Account(1, Decimal(opening), Decimal(buffer), date(2026, 9, 1))
         self.transactions = transactions if transactions is not None else [
             txn("100", "debit", 20 + i, merchant=f"Hist{i}", cname="Misc", cid=9, tid=10 + i)
@@ -43,6 +43,7 @@ class FakeRepo:
             Category(id=1, name="Food", is_default=True, student_id=None),
             Category(id=8, name="Other", is_default=True, student_id=None),
         ]
+        self.savings_goals = list(savings_goals) if savings_goals is not None else []
 
     # -- FinanceRepository surface --
     def get_account(self, sid):
@@ -70,6 +71,18 @@ class FakeRepo:
 
     def get_recurring(self, sid, active_only=True):
         return [r for r in self.recurring if r.active or not active_only]
+
+    def get_savings_goals(self, sid, *, status="active"):
+        gs = [g for g in self.savings_goals if g.student_id == sid]
+        if status is not None:
+            gs = [g for g in gs if g.status == status]
+        return sorted(gs, key=lambda g: (g.target_date, g.id))
+
+    def get_savings_goal(self, sid, goal_id):
+        for g in self.savings_goals:
+            if g.id == goal_id and g.student_id == sid:
+                return g
+        return None
 
 
 def repo_factory(repo=None):

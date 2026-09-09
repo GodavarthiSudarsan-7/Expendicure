@@ -127,6 +127,49 @@ def _fallback(plan, tool_result):
         r = s["results"][0]
         return f"{r['title']}: {r['text'].strip().splitlines()[0]}"
 
+    if t == "get_savings_goals":
+        goals = s.get("goals") or []
+        if not goals:
+            return "You don't have any savings goals set up yet — add one and I can track it for you."
+        g = goals[0] if len(goals) == 1 else min(
+            goals, key=lambda x: (x.get("on_track") is not False, x.get("percent_complete") or "0"))
+        line = (f"Your '{g.get('name')}' goal is {g.get('percent_complete')}% funded — "
+                f"{_m(g.get('current_amount'))} of {_m(g.get('target_amount'))}, "
+                f"{_m(g.get('remaining_amount'))} to go by {g.get('target_date')}.")
+        if g.get("on_track") is True:
+            line += " At your current contribution you're on track."
+        elif g.get("required_monthly_contribution"):
+            line += (f" At {_m(g.get('monthly_contribution'))}/month you'd finish around "
+                     f"{g.get('estimated_completion_date')}; about "
+                     f"{_m(g.get('required_monthly_contribution'))}/month hits the target date.")
+        if len(goals) > 1:
+            line += f" ({len(goals)} goals in total.)"
+        return line
+
+    if t == "evaluate_recovery_plan":
+        amt = _m(s.get("amount"))
+        gi = s.get("goal_impact") or {}
+        goal_note = ""
+        if gi.get("available") and (gi.get("delay_months") or 0) > 0:
+            goal_note = (f" It also pushes your '{gi.get('goal_name')}' goal back about "
+                         f"{gi.get('delay_months')} month(s).")
+        if not s.get("needed"):
+            return (f"Spending {amt} didn't breach your safety buffer — your projected low "
+                    f"point stays at {_m(s.get('projected_min_after_spend'))}, still above the "
+                    f"{_m(s.get('safety_buffer'))} buffer.{goal_note}")
+        rec = s.get("recommended")
+        head = (f"That {amt} spend drops your projected low point to "
+                f"{_m(s.get('projected_min_after_spend'))}, {_m(s.get('gap'))} below your "
+                f"{_m(s.get('safety_buffer'))} safety buffer.")
+        if rec:
+            return (head + f" Best move: {rec.get('label')} — that lifts your projected low "
+                    f"point back to {_m(rec.get('projected_min_with_recovery'))}.{goal_note}")
+        opts = s.get("options") or []
+        if opts:
+            return (head + f" Nothing fully rebuilds the buffer in time; the closest is: "
+                    f"{opts[0].get('label')}.{goal_note}")
+        return head + goal_note
+
     if t == "check_affordability":
         lead = _VERDICT_LEAD.get(s["verdict"], "Here's how it looks.")
         return (f"{lead} A {_m(s['amount'])} purchase leaves your projected low point at "

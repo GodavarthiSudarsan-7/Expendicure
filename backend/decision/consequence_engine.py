@@ -39,6 +39,13 @@ MAX_WAIT_SEARCH_DAYS = 21
 _SPEND_LESS_FRACTIONS = (Decimal("0.75"), Decimal("0.50"), Decimal("0.34"), Decimal("0.25"))
 # below this (relative to the safety buffer) the minimum-balance change is "not meaningful".
 _TRIVIAL_FRACTION = Decimal("0.05")
+# GOAL DECISION RULE (documented): a goal never changes the core decision, which
+# is driven only by balance / safety buffer / risk. The ONE exception: if the
+# decision would otherwise be BUY (buffer is fine, risk unchanged) but the
+# purchase deterministically sets a real, funded savings goal back by at least
+# this many whole months, the decision is escalated to SPEND_LESS. Nothing else
+# about a goal alters the decision.
+GOAL_ESCALATE_DELAY_MONTHS = 3
 
 
 @dataclass(frozen=True)
@@ -112,6 +119,7 @@ class ConsequenceResult:
             "risk_change": self.risk_change,
             "goal_impact": self.goal_impact.to_dict(),
             "goal_delay_days": self.goal_impact.delay_days,
+            "goal_delay_months": self.goal_impact.delay_months,
             "recommended_wait_days": self.recommended_wait_days,
             "largest_safe_amount": (str(self.largest_safe_amount)
                                     if self.largest_safe_amount is not None else None),
@@ -157,7 +165,7 @@ def _scenario_projection(twin, amount: Decimal, purchase_date: date, span: int):
 
 
 def _reason_codes(*, affordable_today, min_before, min_after, breached_before, breached_after,
-                  risk_change, recommended_wait_days, decision, buffer):
+                  risk_change, recommended_wait_days, decision, buffer, goal, goal_escalated):
     codes: List[str] = []
     codes.append("affordable_today" if affordable_today else "would_overdraft_today")
     if min_after < min_before:
@@ -178,7 +186,15 @@ def _reason_codes(*, affordable_today, min_before, min_after, breached_before, b
     if (decision == DECISION_BUY and risk_change == "unchanged"
             and abs(min_before - min_after) < (buffer * _TRIVIAL_FRACTION if buffer > 0 else abs(min_before - min_after))):
         codes.append("no_meaningful_impact")
-    codes.append("goal_impact_unavailable")
+    # goal-impact reason codes
+    if not goal.available:
+        codes.append("goal_impact_unavailable")
+    elif goal.delay_months and goal.delay_months > 0:
+        codes.append(f"delays_goal_by_{goal.delay_months}_months")
+        if goal_escalated:
+            codes.append("delays_goal_significantly")
+    else:
+        codes.append("goal_unaffected")
     return tuple(codes)
 
 
@@ -192,8 +208,14 @@ def evaluate_consequence(
     description: Optional[str] = None,
     purchase_date: Optional[date] = None,
     horizon_days: int = DEFAULT_HORIZON_DAYS,
+    goals=None,
+    goal_id: Optional[int] = None,
 ) -> ConsequenceResult:
     """Evaluate the future consequence of a hypothetical purchase against ``twin``.
+
+    ``goals`` (optional) is a list of :class:`finance.models.SavingsGoal`. With
+    no goals the goal-impact block is ``available=False`` and the decision is
+    computed exactly as in Phase 10 — passing goals is purely additive.
 
     Raises ``ValueError`` for a non-positive amount or a past purchase date.
     Never mutates ``twin`` or anything else.
@@ -277,12 +299,39 @@ def evaluate_consequence(
     else:
         decision = DECISION_BUY
 
-    goal = evaluate_goal_impact(twin, amount=amount, purchase_date=purchase_date)
+    goal = evaluate_goal_impact(
+        twin, amount=amount, purchase_date=purchase_date, goals=goals, goal_id=goal_id,
+    )
+
+    # goal escalation rule (see GOAL_ESCALATE_DELAY_MONTHS) — the only way a goal
+    # touches the decision, and only from a clean BUY.
+    goal_escalated = (
+        decision == DECISION_BUY
+        and goal.available
+        and goal.delay_months is not None
+        and goal.delay_months >= GOAL_ESCALATE_DELAY_MONTHS
+    )
+    if goal_escalated:
+        decision = DECISION_SPEND_LESS
+        if largest_safe_amount is None:
+            # the buffer never forced a smaller amount; offer a goal-safe one
+            for frac in _SPEND_LESS_FRACTIONS:
+                cand = money(amount * frac)
+                if cand <= ZERO:
+                    continue
+                gi = evaluate_goal_impact(
+                    twin, amount=cand, purchase_date=purchase_date,
+                    goals=goals, goal_id=goal_id,
+                )
+                if not gi.available or (gi.delay_months or 0) < GOAL_ESCALATE_DELAY_MONTHS:
+                    largest_safe_amount = cand
+                    break
+
     codes = _reason_codes(
         affordable_today=affordable_today, min_before=min_before, min_after=min_after,
         breached_before=breached_before, breached_after=breached_after,
         risk_change=risk_change, recommended_wait_days=recommended_wait_days,
-        decision=decision, buffer=buffer,
+        decision=decision, buffer=buffer, goal=goal, goal_escalated=goal_escalated,
     )
 
     return ConsequenceResult(

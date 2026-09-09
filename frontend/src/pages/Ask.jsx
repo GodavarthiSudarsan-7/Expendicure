@@ -24,6 +24,8 @@ const TOOL_ACTIVITY = {
   get_transactions: 'Looked through your transactions',
   get_budget_status: 'Checked your budgets',
   retrieve_financial_knowledge: 'Looked up the concept',
+  get_savings_goals: 'Checked your savings goals',
+  evaluate_recovery_plan: 'Built a recovery plan',
 };
 
 export default function Ask() {

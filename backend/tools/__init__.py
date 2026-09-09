@@ -24,6 +24,8 @@ from tools.transaction_tool import GetTransactionsTool
 from tools.budget_tool import GetBudgetStatusTool
 from tools.decision_tool import EvaluateFinancialDecisionTool
 from tools.knowledge_tool import RetrieveFinancialKnowledgeTool
+from tools.goals_tool import GetSavingsGoalsTool
+from tools.recovery_tool import EvaluateRecoveryPlanTool
 
 __all__ = [
     "Tool", "ToolContext", "ToolResult", "ToolRegistry",
@@ -38,7 +40,8 @@ def default_repo_factory():
 
 
 def build_default_registry(repo_factory=default_repo_factory):
-    """Register the toolset (Phase 9 + Phase 10 consequence engine + Phase 11 RAG)."""
+    """Register the toolset (Phase 9 tools + Phase 10 consequence engine +
+    Phase 11 RAG + Phase 13 savings goals & recovery)."""
     reg = ToolRegistry()
     for tool_cls in (
         GetFinancialTwinTool,
@@ -50,6 +53,8 @@ def build_default_registry(repo_factory=default_repo_factory):
         GetTransactionsTool,
         GetBudgetStatusTool,
         RetrieveFinancialKnowledgeTool,
+        GetSavingsGoalsTool,
+        EvaluateRecoveryPlanTool,
     ):
         reg.register(tool_cls(repo_factory))
     return reg

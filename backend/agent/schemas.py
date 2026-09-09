@@ -19,6 +19,8 @@ INTENTS = (
     "TRANSACTION_QUERY",
     "BUDGET_QUERY",
     "KNOWLEDGE",
+    "GOAL_QUERY",
+    "RECOVERY",
     "GENERAL",
 )
 

@@ -9,6 +9,7 @@ EXPECTED = {
     "get_financial_twin", "check_affordability", "evaluate_financial_decision",
     "simulate_expense", "get_cashflow_forecast", "get_financial_anomalies",
     "get_transactions", "get_budget_status", "retrieve_financial_knowledge",
+    "get_savings_goals", "evaluate_recovery_plan",
 }
 
 
