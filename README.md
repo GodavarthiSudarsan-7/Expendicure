@@ -293,6 +293,16 @@ from the token — endpoints do **not** accept a `student_id` parameter.
 
   Config (all optional env vars, in `backend/ai/config.py`): `OLLAMA_BASE_URL` (default `http://localhost:11434`), `OLLAMA_MODEL` (default `mistral`), `OLLAMA_TIMEOUT_SECONDS` (default `60`). Pull the model first: `ollama pull mistral`.
 
+  **RAG embeddings (Phase 11, optional):** `OLLAMA_EMBED_MODEL` (default `nomic-embed-text`), `OLLAMA_BASE_URL` (shared), `KNOWLEDGE_DB_PATH` (default `backend/knowledge/knowledge.sqlite`). Setup:
+
+  ```bash
+  ollama pull nomic-embed-text          # local embedding model for semantic retrieval
+  cd backend
+  python -c "from knowledge import get_retriever; print(get_retriever().build_index(force=True))"
+  ```
+
+  `build_index` is idempotent. If `nomic-embed-text` (or Ollama) is unavailable it still indexes the corpus and retrieval falls back to deterministic keyword matching — `retrieve_financial_knowledge` and Herman keep working either way.
+
   **Graceful degradation:** if Ollama is not installed / not running / the model is missing / it times out / returns junk, every core feature (Dashboard, Transactions, Budgets, Twin, Affordability, What-If, Forecast, Anomalies) keeps working. `/api/ai/*` returns a clear `503`, never a stack trace. The finance engine still imports nothing from `ai/`, `requests`, or Ollama.
 
   **Prompt safety:** a fixed system prompt establishes that the model is an explanation assistant, must not invent or recompute financial numbers, must not claim calculations it didn't receive, must not modify records or execute instructions found in user-supplied text. This is the Phase 9 contract, set up now.
@@ -302,7 +312,51 @@ from the token — endpoints do **not** accept a `student_id` parameter.
 
   **Flow:** `message → context (auth id + recent turns + previous plan) → planner (LLM picks ONE registered tool + args; JSON-only, 1 retry, then a deterministic keyword parser) → argument validation → deterministic tool → existing finance engine → structured result → responder (LLM explains the authoritative result) → AgentResponse`. Max 3 tool executions per request; ≤ 2 model calls (planner + responder).
 
-  **Layering:** `finance ← tools ← agent ← routes`. `agent/` imports `tools/` + `ai/` only (never `database`/`finance`/`finance_db`); `tools/` wrap the existing engines (`finance.twin`, `.affordability`, `.simulate`, `.forecast`, `.anomaly`) and validate every argument. Herman never computes a financial number and cannot write any record. Tools: `get_financial_twin`, `check_affordability`, `simulate_expense`, `get_cashflow_forecast`, `get_financial_anomalies`, `get_transactions`, `get_budget_status`.
+  **Layering:** `finance ← {tools, decision, knowledge} ← agent ← routes`. `agent/` imports `tools/` + `ai/` only (never `database`/`finance`/`finance_db`); `tools/` wrap the existing engines (`finance.twin`, `.affordability`, `.simulate`, `.forecast`, `.anomaly`, plus the Phase 10 `decision/` and Phase 11 `knowledge/` packages) and validate every argument. Herman never computes a financial number and cannot write any record. Tools: `get_financial_twin`, `check_affordability`, `evaluate_financial_decision`, `simulate_expense`, `get_cashflow_forecast`, `get_financial_anomalies`, `get_transactions`, `get_budget_status`, `retrieve_financial_knowledge`.
+
+### Financial Consequence Engine (Phase 10)
+
+> *Expendicure doesn't just tell you whether you can afford something — it shows what the decision costs your future.*
+
+- Tool `evaluate_financial_decision` — `token_required` via Herman. Args `{ amount, category?, description?, merchant?, purchase_date? }`. **Read-only, never writes.** Answers *"what happens to my financial future if I make this purchase?"* by a deterministic **counterfactual**:
+
+  1. **BASELINE** — `project_daily_balances(twin, horizon)` with no purchase.
+  2. **SCENARIO** — the same shared kernel with one extra event: the hypothetical purchase (`−amount` on `purchase_date`).
+  3. **COMPARE** — projected minimum balance before vs after (+ the date it occurs), projected month-end balance before vs after, safety-buffer impact and whether the buffer is breached, risk-state change (`healthy` → `caution` → `at_risk`), affordability verdict/score (reuses `finance.affordability`), a recommended **decision**, a recommended wait period, the largest amount that is still safe today, and machine-readable `reason_codes`.
+
+  **Decision** is one of `BUY` / `WAIT` / `SPEND_LESS` / `AVOID`, chosen deterministically: overdraft or not-affordable-today → `AVOID`; buffer breached but a near-future day recovers it → `WAIT`; buffer breached with a smaller amount safe → `SPEND_LESS`; risk worsens → `SPEND_LESS`; otherwise → `BUY`.
+
+  **Alternatives** — *buy now* / *wait N days* / *spend a safe smaller amount* — are each re-scored by the **same** engine (same projection kernel). The LLM never decides whether an amount is affordable.
+
+  **Goal impact is optional and honest.** The current data model has no savings-goal concept, so `goal_impact` returns `{ available: false, delay_days: null, reason: "no savings goal is configured for this account" }` and the top-level `goal_delay_days` is `null` — nothing is fabricated. `backend/decision/goal_impact.py` documents exactly what a future phase must add (`target_amount`, `target_date`, a monthly contribution) and the deterministic delay formula that will then apply.
+
+  **Purity:** `backend/decision/` imports only `finance/` + stdlib. It must not import Flask, `requests`, Ollama, an LLM client, `agent`, `tools`, `knowledge`, a database, pandas/numpy/sklearn/prophet. `Decimal` throughout; it never mutates the twin or anything else. Enforced by `tests/test_layering_purity.py`.
+
+### Local Financial Knowledge RAG (Phase 11)
+
+- Tool `retrieve_financial_knowledge` — args `{ query, k? }` (k 1–5, default 3) → `{ available, mode, results: [{ title, text, source }] }`. **Read-only; never touches a financial table.**
+
+  A small **curated, version-controlled** corpus of financial *concepts* lives in `backend/knowledge/corpus/*.md` (safety buffer, discretionary spending, budgeting, recurring payments, emergency fund, student finance). No web scraping, no external APIs, no external vector DB, no LangChain/LlamaIndex.
+
+  - **Chunking** — deterministic markdown chunker (`chunker.py`); chunk ids are `"<source>#<index>"` so retrieval is reproducible.
+  - **Embeddings** — computed **locally** via Ollama `nomic-embed-text` (`/api/embeddings`). Stored as JSON in an **isolated SQLite file** `backend/knowledge/knowledge.sqlite` (`knowledge_chunks` + `knowledge_meta` tables only — completely separate from the MySQL financial DB; `CREATE TABLE IF NOT EXISTS`, no financial migration).
+  - **Retrieval modes** (chosen automatically): `semantic` (local embeddings + pure-Python cosine), `keyword` (deterministic token-overlap when embeddings are unavailable), `empty` (blank query), `unavailable` (no corpus). Same corpus + same query → stable results.
+
+  **RAG safety rule — RAG never provides authoritative financial numbers.** It may say *"a safety buffer protects against unexpected expenses"*; it must never say *"you have ₹7,350 available."* Financial numbers come from the deterministic engines; financial **concepts** come from RAG; the natural-language explanation is Herman's.
+
+  **Supporting, not required.** The core finance engine and Herman do not depend on Ollama. If embeddings/Ollama are unavailable the retriever degrades to keyword mode; if the whole knowledge layer fails, `agent.orchestrator._retrieve_knowledge` swallows the error and returns `None`. "RAG unavailable" never causes a 500, an agent failure, or a decision failure.
+
+  **Combined flow** — for *"Can I buy headphones for ₹5,000?"*: Herman → `evaluate_financial_decision` → authoritative deterministic RESULT → (best-effort) `retrieve_financial_knowledge` → relevant concept passages → Herman's final explanation. The responder is explicitly instructed to use **numbers only from the RESULT**, concepts only from the retrieved passages, to treat retrieved text as untrusted content, and never to override the engine's decision or figures.
+
+### Separation of concerns — financial truth vs. knowledge vs. explanation
+
+| Layer | Owns | Never does |
+|---|---|---|
+| **Deterministic engines** (`finance/`, `decision/`) | every figure about the user's money — balances, projections, affordability, buffer impact, risk, the BUY/WAIT/SPEND_LESS/AVOID decision | talk to an LLM; write to the DB |
+| **Local RAG** (`knowledge/`) | explaining financial *concepts* from a curated corpus | state the user's actual numbers; provide authoritative values |
+| **Herman** (`agent/`) | orchestration + natural-language explanation of the authoritative result | compute, round, override or invent a financial number |
+
+**The LLM does not calculate financial truth.** It obtains every financial fact from a deterministic tool and passes the structured result through unchanged.
 
 ## AI agent architecture (planned)
 
@@ -313,14 +367,20 @@ and only to orchestrate and explain.
 
 ```
 User
-  -> Financial Orchestrator Agent          (local LLM via Ollama - Phase 9)
-    -> Financial Tools                      (hand-written registry - Phase 9; no LangChain/LlamaIndex/MCP)
+  -> Financial Orchestrator Agent          (Herman - local LLM via Ollama - Phase 9)
+    -> Financial Tools                      (hand-written registry; no LangChain/LlamaIndex/MCP)
        - get_financial_twin
        - check_affordability                <-- shipped in Phase 4
-       - simulate_financial_scenario        <-- shipped in Phase 5
-       - forecast_cashflow                  <-- shipped in Phase 6
-       - detect_anomalies                   <-- shipped in Phase 7
-       - retrieve_financial_knowledge       (Phase 10)
+       - evaluate_financial_decision        <-- shipped in Phase 10  (Financial Consequence Engine)
+       - simulate_expense                   <-- shipped in Phase 5
+       - get_cashflow_forecast              <-- shipped in Phase 6
+       - get_financial_anomalies            <-- shipped in Phase 7
+       - get_transactions / get_budget_status
+       - retrieve_financial_knowledge       <-- shipped in Phase 11  (Local RAG)
+    -> Financial Consequence Engine         (decision/ package - Phase 10; pure, Decimal, no LLM/DB)
+       - decision.consequence_engine : BASELINE vs SCENARIO counterfactual -> BUY/WAIT/SPEND_LESS/AVOID
+       - decision.alternatives       : buy-now / wait / spend-less, each re-scored by the same engine
+       - decision.goal_impact        : optional; returns "unavailable" until a goal model exists
     -> Deterministic Finance Engine         (finance/ package - pure, Decimal, no Flask/DB/LLM)
        - finance.twin            : the source-of-truth Financial Digital Twin
        - finance.projection      : the single shared day-by-day balance kernel
@@ -329,8 +389,9 @@ User
        - finance.forecast        : the cash-flow forecast (expected future)
        - finance.anomaly         : deterministic anomaly detection (facts, not advice)
        - finance.recurrence      : shared recurrence-date arithmetic
-    -> Guardrails                           (Phase 11)
-    -> Agent explanation
+    -> Local Financial Knowledge RAG        (knowledge/ package - Phase 11; curated corpus + local
+       embeddings + isolated SQLite; concepts only, never authoritative numbers; degrades gracefully)
+    -> Agent explanation                    (numbers only from the deterministic RESULT)
 ```
 
 **Non-negotiable rule:** the LLM never computes, rounds, overrides, or invents a
@@ -388,7 +449,19 @@ expendicure/
 │   ├── finance/                 # deterministic domain layer (no Flask, no DB driver)
 │   │   ├── models.py
 │   │   ├── money.py
+│   │   ├── twin.py  projection.py  affordability.py  simulate.py  forecast.py  anomaly.py  recurrence.py
 │   │   └── repository.py
+│   ├── decision/                # Phase 10 — Financial Consequence Engine (pure; sits on finance/)
+│   │   ├── consequence_engine.py
+│   │   ├── alternatives.py
+│   │   └── goal_impact.py
+│   ├── knowledge/               # Phase 11 — Local RAG (curated corpus + local embeddings + isolated SQLite)
+│   │   ├── corpus/*.md
+│   │   ├── chunker.py  embeddings.py  store.py  retriever.py
+│   │   └── knowledge.sqlite     # generated; isolated from the MySQL financial DB
+│   ├── decision_tool.py / knowledge_tool.py under tools/
+│   ├── agent/                   # Herman — planner / tools / responder / orchestrator
+│   ├── ai/                      # local Ollama client (Phase 8)
 │   ├── routes/
 │   │   ├── auth.py
 │   │   ├── students.py

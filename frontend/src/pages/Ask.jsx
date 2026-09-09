@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import { agentApi, apiError } from '../api';
 import { useAiHealth } from '../hooks/useAiHealth';
 import { Card, CardBody, Button, Textarea, Chip, Badge, Alert } from '../components/ui';
+import DecisionCard from '../components/DecisionCard';
 import { initials } from '../lib/format';
 
 const SUGGESTED = [
@@ -15,12 +16,14 @@ const SUGGESTED = [
 
 const TOOL_ACTIVITY = {
   check_affordability: 'Checked affordability',
+  evaluate_financial_decision: 'Projected the consequence of this purchase',
   simulate_expense: 'Ran a what-if',
   get_cashflow_forecast: 'Pulled your forecast',
   get_financial_anomalies: 'Scanned for unusual activity',
   get_financial_twin: 'Read your financial snapshot',
   get_transactions: 'Looked through your transactions',
   get_budget_status: 'Checked your budgets',
+  retrieve_financial_knowledge: 'Looked up the concept',
 };
 
 export default function Ask() {
@@ -49,6 +52,7 @@ export default function Ask() {
         role: 'herman',
         text: res.text,
         tool_used: res.tool_used,
+        data: res.data || null,
         actions: res.suggested_actions || [],
         offline: res.ai && res.ai.available === false,
       }]);
@@ -122,6 +126,14 @@ export default function Ask() {
                         <Badge tone="warn" className="mb-2">Local AI offline</Badge>
                       )}
                       <div className="soft" style={{ whiteSpace: 'pre-wrap', lineHeight: 1.6 }}>{m.text}</div>
+                      {m.role === 'herman' && m.tool_used === 'evaluate_financial_decision' && m.data && (
+                        <DecisionCard data={m.data} onAsk={(q) => send(q)} />
+                      )}
+                      {m.role === 'herman' && Array.isArray(m.data?.knowledge_used) && m.data.knowledge_used.length > 0 && (
+                        <div className="muted mt-2" style={{ fontSize: '0.76rem' }}>
+                          Concept context: {m.data.knowledge_used.map((k) => k.title).join(' · ')}
+                        </div>
+                      )}
                       {m.role === 'herman' && (m.actions || []).length > 0 && (
                         <div className="row wrap gap-2 mt-4">
                           {m.actions.map((a, j) => (
