@@ -7,7 +7,7 @@ monthly noise; the emergency fund covers rare, larger events.
 
 ## How much
 
-For a student, a first target of three to four weeks of essential spending is
+A common first target is three to four weeks of essential spending, which is
 reasonable. Once that is in place, growing it toward two to three months gives
 real resilience. Build it gradually — a small, automatic transfer each time
 income lands is more reliable than occasional large ones.

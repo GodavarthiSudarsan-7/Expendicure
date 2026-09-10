@@ -1,0 +1,20 @@
+# Android / Gradle build outputs
+.gradle/
+build/
+app/build/
+*.apk
+*.ap_
+*.aab
+*.dex
+
+# Local machine config — points at this machine's Android SDK. Never commit.
+local.properties
+
+# IDE
+.idea/
+*.iml
+.DS_Store
+
+# Keystores (none checked in — signing config is not part of this repo)
+*.jks
+*.keystore

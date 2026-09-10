@@ -21,6 +21,8 @@ from typing import Callable, Dict, List, Optional
 
 from finance.models import (
     Account,
+    BankConnection,
+    BankSmsEvent,
     CategorizationRule,
     Category,
     RecurringTransaction,
@@ -242,6 +244,73 @@ class FinanceRepository:
             target_date=_as_date(row["target_date"]),
             status=row.get("status") or GOAL_ACTIVE,
         )
+
+    # ------------------------------------------------------ bank connections (Phase 15)
+    def get_bank_connections(self, student_id: int, *, enabled_only: bool = False):
+        """The student's configured bank SMS sources. Read-only; ownership is
+        always scoped by ``student_id``."""
+        sql = (
+            "SELECT id, student_id, bank_name, sender_id, masked_account, enabled, "
+            "       ingest_token_hash, last_event_at, events_detected "
+            "FROM bank_connections WHERE student_id = %s"
+        )
+        params = [student_id]
+        if enabled_only:
+            sql += " AND enabled = TRUE"
+        sql += " ORDER BY id"
+        rows = self._query(sql, tuple(params)) or []
+        return [
+            BankConnection(
+                id=r["id"], student_id=r["student_id"], bank_name=r["bank_name"],
+                sender_id=r["sender_id"], masked_account=r.get("masked_account"),
+                enabled=_as_bool(r.get("enabled", True)),
+                ingest_token_hash=r.get("ingest_token_hash"),
+                last_event_at=(r["last_event_at"].isoformat()
+                               if r.get("last_event_at") is not None
+                               and hasattr(r["last_event_at"], "isoformat")
+                               else r.get("last_event_at")),
+                events_detected=int(r.get("events_detected") or 0),
+            )
+            for r in rows
+        ]
+
+    def get_bank_sms_events(self, student_id: int, *, status=None):
+        """The student's detected bank-SMS transaction events (structured fields
+        only — the raw SMS body is never stored)."""
+        sql = (
+            "SELECT id, student_id, connection_id, status, direction, amount, "
+            "       occurred_on, occurred_at, merchant, masked_account, bank_ref_id, "
+            "       fingerprint, detect_reason, template_id, transaction_id "
+            "FROM bank_sms_events WHERE student_id = %s"
+        )
+        params = [student_id]
+        if status is not None:
+            if isinstance(status, (list, tuple, set)):
+                placeholders = ", ".join(["%s"] * len(status))
+                sql += f" AND status IN ({placeholders})"
+                params.extend(status)
+            else:
+                sql += " AND status = %s"
+                params.append(status)
+        sql += " ORDER BY id DESC"
+        rows = self._query(sql, tuple(params)) or []
+        return [
+            BankSmsEvent(
+                id=r["id"], student_id=r["student_id"], connection_id=r["connection_id"],
+                status=r["status"], direction=r.get("direction"),
+                amount=money(r["amount"]) if r.get("amount") is not None else None,
+                occurred_on=_as_date(r["occurred_on"]) if r.get("occurred_on") else None,
+                occurred_at=(r["occurred_at"].isoformat()
+                             if r.get("occurred_at") is not None
+                             and hasattr(r["occurred_at"], "isoformat")
+                             else r.get("occurred_at")),
+                merchant=r.get("merchant"), masked_account=r.get("masked_account"),
+                bank_ref_id=r.get("bank_ref_id"), fingerprint=r.get("fingerprint") or "",
+                detect_reason=r.get("detect_reason"), template_id=r.get("template_id"),
+                transaction_id=r.get("transaction_id"),
+            )
+            for r in rows
+        ]
 
     # ----------------------------------------------------------------- balance
     def compute_current_balance(

@@ -1,0 +1,4 @@
+# Copy to local.properties and set to your Android SDK location.
+# This file is machine-specific and MUST NOT be committed (see .gitignore).
+# Use forward slashes even on Windows.
+sdk.dir=C:/Users/you/AppData/Local/Android/Sdk

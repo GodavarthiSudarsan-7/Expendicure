@@ -3,7 +3,10 @@ import { useNavigate, Link } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import { Card, CardBody, Field, Input, Button, Alert } from '../components/ui';
 
-const empty = { name: '', email: '', student_id_str: '', username: '', password: '', confirm: '' };
+const empty = { name: '', mobile_number: '', username: '', password: '', confirm: '' };
+
+// digits only after stripping spaces/dashes/parens, optional leading "+"
+const MOBILE_OK = /^\+?[0-9]{8,15}$/;
 
 export default function Register() {
   const { register } = useAuth();
@@ -17,10 +20,14 @@ export default function Register() {
     e.preventDefault();
     setErr('');
     if (form.password !== form.confirm) return setErr('Passwords do not match.');
+    const mobile = form.mobile_number.replace(/[\s\-().]/g, '');
+    if (!MOBILE_OK.test(mobile)) return setErr('Enter a valid mobile number.');
     setBusy(true);
     const res = await register({
-      name: form.name, email: form.email, student_id_str: form.student_id_str,
-      username: form.username, password: form.password,
+      name: form.name.trim(),
+      mobile_number: mobile,
+      username: form.username.trim(),
+      password: form.password,
     });
     if (res.success) nav('/login');
     else { setErr(res.error); setBusy(false); }
@@ -45,15 +52,25 @@ export default function Register() {
             <h2>Create your account</h2>
             <p className="muted mb-6">It takes about a minute.</p>
             <form onSubmit={submit}>
+              <Field label="Full name">
+                <Input value={form.name} onChange={set('name')} autoComplete="name" required />
+              </Field>
+              <Field label="Mobile number">
+                <Input type="tel" value={form.mobile_number} onChange={set('mobile_number')}
+                  placeholder="+91 98765 43210" autoComplete="tel" required />
+              </Field>
+              <Field label="Username">
+                <Input value={form.username} onChange={set('username')} autoComplete="username" required />
+              </Field>
               <div className="form-row">
-                <Field label="Full name"><Input value={form.name} onChange={set('name')} required /></Field>
-                <Field label="Student ID"><Input value={form.student_id_str} onChange={set('student_id_str')} placeholder="STU003" required /></Field>
-              </div>
-              <Field label="Email"><Input type="email" value={form.email} onChange={set('email')} required /></Field>
-              <Field label="Username"><Input value={form.username} onChange={set('username')} required /></Field>
-              <div className="form-row">
-                <Field label="Password"><Input type="password" value={form.password} onChange={set('password')} required /></Field>
-                <Field label="Confirm"><Input type="password" value={form.confirm} onChange={set('confirm')} required /></Field>
+                <Field label="Password">
+                  <Input type="password" value={form.password} onChange={set('password')}
+                    autoComplete="new-password" required />
+                </Field>
+                <Field label="Confirm password">
+                  <Input type="password" value={form.confirm} onChange={set('confirm')}
+                    autoComplete="new-password" required />
+                </Field>
               </div>
               {err && <Alert tone="bad">{err}</Alert>}
               <Button type="submit" block loading={busy}>Create account</Button>

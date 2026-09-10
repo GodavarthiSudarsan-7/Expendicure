@@ -8,7 +8,7 @@ from tools._goals import goals_for
 class GetSavingsGoalsTool(Tool):
     name = "get_savings_goals"
     description = (
-        "Read the student's savings goals and their deterministic progress: "
+        "Read the user's savings goals and their deterministic progress: "
         "target amount, saved so far, remaining, percent complete, target date, "
         "planned monthly contribution, estimated completion date, whether each "
         "goal is on track or behind, and the contribution needed to hit the "

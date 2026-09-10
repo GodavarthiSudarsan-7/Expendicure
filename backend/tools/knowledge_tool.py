@@ -6,8 +6,8 @@ class RetrieveFinancialKnowledgeTool(Tool):
     description = (
         "Retrieve short passages from Expendicure's local financial-education "
         "corpus (safety buffer, discretionary spending, budgeting, recurring "
-        "payments, emergency fund, student finance). Read-only, for explaining "
-        "CONCEPTS — it never returns the student's actual balance or any figure "
+        "payments, emergency fund, personal finance). Read-only, for explaining "
+        "CONCEPTS — it never returns the user's actual balance or any figure "
         "about their money. Use for 'what is a safety buffer', 'explain "
         "discretionary spending', etc."
     )

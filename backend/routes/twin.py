@@ -1,4 +1,4 @@
-"""GET /api/twin/state — the Financial Digital Twin for the authenticated student.
+"""GET /api/twin/state — the Financial Digital Twin for the authenticated account.
 
 Every value in the response is computed deterministically by
 ``finance.twin.build_twin_state`` from database rows. Money is returned as

@@ -1,0 +1,166 @@
+<?xml version="1.0" encoding="utf-8"?>
+<ScrollView xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:background="@color/bg"
+    android:fillViewport="true">
+
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:orientation="vertical"
+        android:padding="20dp">
+
+        <TextView
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:letterSpacing="0.12"
+            android:text="@string/title"
+            android:textColor="@color/brand"
+            android:textSize="14sp"
+            android:textStyle="bold" />
+
+        <TextView
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_marginBottom="16dp"
+            android:text="@string/subtitle"
+            android:textColor="@color/ink"
+            android:textSize="22sp"
+            android:textStyle="bold" />
+
+        <!-- STATUS CARD -->
+        <com.google.android.material.card.MaterialCardView
+            style="@style/Widget.Material3.CardView.Elevated"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginBottom="16dp"
+            app:cardCornerRadius="16dp">
+
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:orientation="vertical"
+                android:padding="18dp">
+
+                <TextView android:id="@+id/connectionState"
+                    android:layout_width="wrap_content" android:layout_height="wrap_content"
+                    android:text="@string/state_not_configured"
+                    android:textColor="@color/ink" android:textSize="18sp" android:textStyle="bold" />
+
+                <TextView android:id="@+id/permissionState"
+                    android:layout_width="wrap_content" android:layout_height="wrap_content"
+                    android:layout_marginTop="2dp"
+                    android:text="@string/perm_needed"
+                    android:textColor="@color/muted" android:textSize="13sp" />
+
+                <Button android:id="@+id/grantPermissionButton"
+                    style="@style/Widget.Material3.Button.TonalButton"
+                    android:layout_width="wrap_content" android:layout_height="wrap_content"
+                    android:layout_marginTop="8dp"
+                    android:text="@string/grant_permission" />
+
+                <View android:layout_width="match_parent" android:layout_height="1dp"
+                    android:layout_marginVertical="12dp" android:background="#E2E8F0" />
+
+                <TextView android:layout_width="wrap_content" android:layout_height="wrap_content"
+                    android:text="@string/label_bank" android:textColor="@color/muted" android:textSize="12sp" />
+                <TextView android:id="@+id/configuredBank"
+                    android:layout_width="wrap_content" android:layout_height="wrap_content"
+                    android:text="—" android:textColor="@color/ink" android:textSize="15sp" android:textStyle="bold" />
+
+                <TextView android:layout_width="wrap_content" android:layout_height="wrap_content"
+                    android:layout_marginTop="8dp"
+                    android:text="@string/label_sender" android:textColor="@color/muted" android:textSize="12sp" />
+                <TextView android:id="@+id/configuredSender"
+                    android:layout_width="wrap_content" android:layout_height="wrap_content"
+                    android:text="—" android:textColor="@color/ink" android:textSize="15sp" android:textStyle="bold" />
+
+                <TextView android:layout_width="wrap_content" android:layout_height="wrap_content"
+                    android:layout_marginTop="8dp"
+                    android:text="@string/label_last_sync" android:textColor="@color/muted" android:textSize="12sp" />
+                <TextView android:id="@+id/lastSync"
+                    android:layout_width="wrap_content" android:layout_height="wrap_content"
+                    android:text="—" android:textColor="@color/ink" android:textSize="15sp" />
+            </LinearLayout>
+        </com.google.android.material.card.MaterialCardView>
+
+        <!-- PRIVACY -->
+        <TextView
+            android:layout_width="match_parent" android:layout_height="wrap_content"
+            android:layout_marginBottom="16dp"
+            android:background="#EEF2FF" android:padding="12dp"
+            android:text="@string/privacy_blurb"
+            android:textColor="#3730A3" android:textSize="12sp" />
+
+        <!-- CONFIG FORM -->
+        <TextView
+            android:layout_width="wrap_content" android:layout_height="wrap_content"
+            android:layout_marginBottom="8dp"
+            android:text="@string/config_heading"
+            android:textColor="@color/ink" android:textSize="16sp" android:textStyle="bold" />
+
+        <com.google.android.material.textfield.TextInputLayout
+            android:layout_width="match_parent" android:layout_height="wrap_content"
+            android:hint="@string/hint_url" app:helperText="@string/help_url" app:helperTextEnabled="true">
+            <com.google.android.material.textfield.TextInputEditText
+                android:id="@+id/urlInput"
+                android:layout_width="match_parent" android:layout_height="wrap_content"
+                android:inputType="textUri" android:maxLines="1" />
+        </com.google.android.material.textfield.TextInputLayout>
+
+        <com.google.android.material.textfield.TextInputLayout
+            android:layout_width="match_parent" android:layout_height="wrap_content"
+            android:layout_marginTop="8dp" android:hint="@string/hint_bank_name">
+            <com.google.android.material.textfield.TextInputEditText
+                android:id="@+id/bankNameInput"
+                android:layout_width="match_parent" android:layout_height="wrap_content"
+                android:inputType="textCapWords" android:maxLines="1" />
+        </com.google.android.material.textfield.TextInputLayout>
+
+        <com.google.android.material.textfield.TextInputLayout
+            android:layout_width="match_parent" android:layout_height="wrap_content"
+            android:layout_marginTop="8dp" android:hint="@string/hint_sender">
+            <com.google.android.material.textfield.TextInputEditText
+                android:id="@+id/senderInput"
+                android:layout_width="match_parent" android:layout_height="wrap_content"
+                android:inputType="textCapCharacters|textNoSuggestions" android:maxLines="1" />
+        </com.google.android.material.textfield.TextInputLayout>
+
+        <com.google.android.material.textfield.TextInputLayout
+            android:layout_width="match_parent" android:layout_height="wrap_content"
+            android:layout_marginTop="8dp" android:hint="@string/hint_token"
+            app:endIconMode="password_toggle">
+            <com.google.android.material.textfield.TextInputEditText
+                android:id="@+id/tokenInput"
+                android:layout_width="match_parent" android:layout_height="wrap_content"
+                android:inputType="textPassword|textNoSuggestions" android:maxLines="1" />
+        </com.google.android.material.textfield.TextInputLayout>
+
+        <LinearLayout
+            android:layout_width="match_parent" android:layout_height="wrap_content"
+            android:layout_marginTop="12dp" android:orientation="horizontal">
+            <Button android:id="@+id/testButton"
+                style="@style/Widget.Material3.Button.OutlinedButton"
+                android:layout_width="0dp" android:layout_height="wrap_content"
+                android:layout_weight="1" android:text="@string/test_connection" />
+            <Space android:layout_width="10dp" android:layout_height="1dp" />
+            <Button android:id="@+id/saveButton"
+                android:layout_width="0dp" android:layout_height="wrap_content"
+                android:layout_weight="1" android:text="@string/save_config" />
+        </LinearLayout>
+
+        <TextView android:id="@+id/statusText"
+            android:layout_width="match_parent" android:layout_height="wrap_content"
+            android:layout_marginTop="12dp" android:minHeight="20dp"
+            android:text=""
+            android:textColor="@color/ink" android:textSize="13sp" />
+
+        <TextView
+            android:layout_width="match_parent" android:layout_height="wrap_content"
+            android:layout_marginTop="20dp"
+            android:text="@string/permission_rationale"
+            android:textColor="@color/muted" android:textSize="11sp" />
+    </LinearLayout>
+</ScrollView>

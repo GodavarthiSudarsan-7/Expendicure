@@ -1,4 +1,4 @@
-"""Shared helper: load the authenticated student's savings goals for a tool call.
+"""Shared helper: load the authenticated user's savings goals for a tool call.
 
 Read-only. Identity is ``ctx.user_id`` (from the token) — never an argument.
 Any failure to reach the goal store returns ``[]`` so goal-unaware behaviour

@@ -1,6 +1,6 @@
 # Budgeting basics
 
-A budget is a plan for money before you spend it. For a student, a simple
+A budget is a plan for money before you spend it. For most people, a simple
 category budget is usually enough: a monthly limit for food, one for transport,
 one for entertainment, and so on. The point is not to predict perfectly, but to
 notice early when a category is running hot.

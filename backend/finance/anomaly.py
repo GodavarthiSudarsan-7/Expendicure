@@ -117,7 +117,7 @@ _RATIO_Q = Decimal("0.01")
 TOOL_SPEC = {
     "name": "detect_anomalies",
     "description": (
-        "Deterministically scan the student's transaction history for suspicious "
+        "Deterministically scan the user's transaction history for suspicious "
         "or unusual events: unusually large amounts, category spending spikes, "
         "likely duplicate transactions, budget breaches, and large debits to "
         "never-before-seen merchants. Returns structured findings with evidence "

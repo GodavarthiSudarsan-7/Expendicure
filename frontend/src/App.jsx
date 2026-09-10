@@ -8,8 +8,10 @@ import Dashboard from './pages/Dashboard';
 import BeforeYouSpend from './pages/BeforeYouSpend';
 import Goals from './pages/Goals';
 import Recovery from './pages/Recovery';
+import Connections from './pages/Connections';
 import Transactions from './pages/Transactions';
 import AddTransaction from './pages/AddTransaction';
+import Reports from './pages/Reports';
 import Budget from './pages/Budget';
 import CategoryManager from './pages/CategoryManager';
 import Recurring from './pages/Recurring';
@@ -41,8 +43,10 @@ const routes = [
   ['/before-you-spend', BeforeYouSpend],
   ['/goals', Goals],
   ['/recovery', Recovery],
+  ['/connections', Connections],
   ['/transactions', Transactions],
   ['/transactions/add', AddTransaction],
+  ['/reports', Reports],
   ['/budgets', Budget],
   ['/recurring', Recurring],
   ['/forecast', Forecast],
@@ -67,7 +71,6 @@ export default function App() {
             ))}
             {/* legacy redirects */}
             <Route path="/budget" element={<Navigate to="/budgets" replace />} />
-            <Route path="/reports" element={<Navigate to="/forecast" replace />} />
             <Route path="/dashboard" element={<Navigate to="/" replace />} />
             <Route path="/decide" element={<Navigate to="/before-you-spend" replace />} />
             <Route path="*" element={<Navigate to="/" replace />} />

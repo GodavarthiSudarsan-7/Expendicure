@@ -1,10 +1,10 @@
 -- Expendicure Seed Data
 -- Sample data for testing the application
 
--- Insert sample student
+-- Insert sample accounts
 INSERT INTO students (student_id, name, email) VALUES 
-('STU001', 'John Doe', 'john.doe@university.edu'),
-('STU002', 'Jane Smith', 'jane.smith@university.edu');
+('U0000000001', 'John Doe', 'john.doe@example.com'),
+('U0000000002', 'Jane Smith', 'jane.smith@example.com');
 
 -- Insert default categories
 INSERT INTO categories (name, is_default) VALUES 
@@ -17,7 +17,7 @@ INSERT INTO categories (name, is_default) VALUES
 ('Health', TRUE),
 ('Other', TRUE);
 
--- Insert sample transactions for John Doe (student_id = 1)
+-- Insert sample transactions for account id 1 (John Doe)
 INSERT INTO transactions (student_id, amount, merchant_name, category_id, payment_date, payment_method, notes) VALUES 
 (1, 15.50, 'Campus Cafe', 1, '2026-04-01', 'Credit Card', 'Lunch with friends'),
 (1, 8.75, 'Bookstore', 4, '2026-04-02', 'Debit Card', 'Notebook for class'),
@@ -28,7 +28,7 @@ INSERT INTO transactions (student_id, amount, merchant_name, category_id, paymen
 (1, 75.00, 'Doctor Visit', 7, '2026-04-06', 'Credit Card', 'Checkup'),
 (1, 12.99, 'Netflix', 6, '2026-04-07', 'Credit Card', 'Monthly subscription');
 
--- Insert sample transactions for Jane Smith (student_id = 2)
+-- Insert sample transactions for account id 2 (Jane Smith)
 INSERT INTO transactions (student_id, amount, merchant_name, category_id, payment_date, payment_method, notes) VALUES 
 (2, 9.50, 'Coffee Shop', 1, '2026-04-01', 'Cash', 'Morning coffee'),
 (2, 25.00, 'Textbook Store', 4, '2026-04-02', 'Credit Card', 'Biology textbook'),
@@ -37,7 +37,7 @@ INSERT INTO transactions (student_id, amount, merchant_name, category_id, paymen
 (2, 400.00, 'Dormitory', 5, '2026-04-01', 'Bank Transfer', 'Monthly housing'),
 (2, 15.20, 'Pharmacy', 7, '2026-04-05', 'Credit Card', 'Medication');
 
--- Insert sample budgets for John Doe (student_id = 1) for April 2026
+-- Insert sample budgets for account id 1 (John Doe) for April 2026
 INSERT INTO budgets (student_id, category_id, monthly_limit, month) VALUES 
 (1, 1, 200.00, '2026-04'), -- Food
 (1, 2, 150.00, '2026-04'), -- Rations
@@ -48,7 +48,7 @@ INSERT INTO budgets (student_id, category_id, monthly_limit, month) VALUES
 (1, 7, 75.00, '2026-04'),  -- Health
 (1, 8, 50.00, '2026-04');  -- Other
 
--- Insert sample budgets for Jane Smith (student_id = 2) for April 2026
+-- Insert sample budgets for account id 2 (Jane Smith) for April 2026
 INSERT INTO budgets (student_id, category_id, monthly_limit, month) VALUES 
 (2, 1, 150.00, '2026-04'), -- Food
 (2, 2, 100.00, '2026-04'), -- Rations

@@ -35,6 +35,23 @@ def _category_exists(category_id):
     ) is not None
 
 
+def insert_transaction(student_id, *, amount, direction, merchant_name, category_id,
+                       payment_date, payment_method=None, notes=None):
+    """Insert one row into the existing ``transactions`` table and return its id
+    (or ``None`` on failure). Shared by the manual add-transaction route and the
+    Phase 15 bank-SMS confirm flow so there is exactly one write path into the
+    Financial Twin's source of truth."""
+    return execute_query(
+        "INSERT INTO transactions "
+        "(student_id, amount, direction, merchant_name, category_id, "
+        " payment_date, payment_method, notes) "
+        "VALUES (%s, %s, %s, %s, %s, %s, %s, %s)",
+        (student_id, str(amount), direction, merchant_name, category_id,
+         payment_date, payment_method, notes),
+        commit=True,
+    )
+
+
 @transactions_bp.route('/', methods=['GET'], strict_slashes=False)
 @token_required
 def get_transactions(current_student):
@@ -81,23 +98,16 @@ def add_transaction(current_student):
     if not _category_exists(data['category_id']):
         return jsonify({"error": "category_id does not exist"}), 400
 
-    query = """
-        INSERT INTO transactions
-            (student_id, amount, direction, merchant_name, category_id,
-             payment_date, payment_method, notes)
-        VALUES (%s, %s, %s, %s, %s, %s, %s, %s)
-    """
-    params = (
+    transaction_id = insert_transaction(
         student_id,
-        str(amount),
-        direction,
-        data['merchant_name'],
-        data['category_id'],
-        data['payment_date'],
-        data.get('payment_method'),
-        data.get('notes'),
+        amount=amount,
+        direction=direction,
+        merchant_name=data['merchant_name'],
+        category_id=data['category_id'],
+        payment_date=data['payment_date'],
+        payment_method=data.get('payment_method'),
+        notes=data.get('notes'),
     )
-    transaction_id = execute_query(query, params, commit=True)
     if transaction_id is None:
         return jsonify({"error": "Failed to add transaction"}), 500
 

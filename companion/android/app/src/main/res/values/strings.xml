@@ -1,0 +1,45 @@
+<resources>
+    <string name="app_name">Expendicure Companion</string>
+    <string name="title">EXPENDICURE</string>
+    <string name="subtitle">Bank SMS Companion</string>
+
+    <string name="privacy_blurb">Your SMS stays on your phone unless it matches the configured bank sender. Raw SMS messages are not stored by this companion, and no transaction is added to Expendicure until you confirm it in the web app.</string>
+
+    <string name="permission_rationale">Expendicure reads incoming SMS only to detect transaction notifications from the bank sender you configure. It ignores every other message on the device.</string>
+
+    <!-- status card -->
+    <string name="status_heading">Status</string>
+    <string name="state_ready">● Connected</string>
+    <string name="state_not_configured">○ Not configured</string>
+    <string name="state_permission_missing">○ SMS permission needed</string>
+    <string name="perm_granted">SMS permission: granted</string>
+    <string name="perm_needed">SMS permission: not granted</string>
+    <string name="label_bank">Configured bank</string>
+    <string name="label_sender">Sender</string>
+    <string name="label_last_sync">Last sync</string>
+    <string name="grant_permission">Grant SMS permission</string>
+
+    <!-- config form -->
+    <string name="config_heading">Connection</string>
+    <string name="hint_url">Expendicure server URL</string>
+    <string name="help_url">https://your-host   (dev: http://192.168.1.10:5000)</string>
+    <string name="hint_bank_name">Bank name (display only)</string>
+    <string name="hint_sender">Bank sender ID  (e.g. HDFCBK)  — NOT your phone number</string>
+    <string name="hint_token">Ingest token  (paste once from Connections)</string>
+    <string name="token_stored_placeholder">•••••••• token stored ••••••••</string>
+    <string name="test_connection">Test Connection</string>
+    <string name="save_config">Save Configuration</string>
+
+    <!-- messages -->
+    <string name="testing">Testing…</string>
+    <string name="saved">Configuration saved.</string>
+    <string name="test_ok">Connected. This sender is configured on your Expendicure account.</string>
+    <string name="test_bad_token">Ingest token was rejected. Re-copy it from Connections → Manage.</string>
+    <string name="test_unreachable">Could not reach that URL. On a phone, use your PC\'s LAN IP, not localhost.</string>
+    <string name="test_sender_mismatch">Reached Expendicure, but that sender is not a configured, enabled bank on your account.</string>
+    <string name="test_server_error">Expendicure returned a server error. Try again shortly.</string>
+    <string name="test_rejected">Expendicure rejected the request. Check the server URL.</string>
+    <string name="error_bad_url">Enter an https URL, or an http URL on your local network (10.x / 192.168.x / *.local).</string>
+    <string name="error_bad_sender">Enter the bank\'s SMS sender ID (max 40 characters). This is not your mobile number.</string>
+    <string name="error_no_token">Paste the ingest token from Expendicure → Connections.</string>
+</resources>

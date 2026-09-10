@@ -133,7 +133,7 @@ CONFIDENCE_ORDER = {"low": 0, "medium": 1, "high": 2}
 TOOL_SPEC = {
     "name": "forecast_cashflow",
     "description": (
-        "Deterministically project the student's expected balance over the next "
+        "Deterministically project the user's expected balance over the next "
         "N days from their current balance plus known recurring money movements "
         "(active user-declared recurring transactions and conservatively detected "
         "recurring patterns from history). Returns the projected minimum and "

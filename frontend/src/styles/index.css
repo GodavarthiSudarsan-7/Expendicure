@@ -701,3 +701,179 @@ table.table { width: 100%; border-collapse: collapse; font-size: 0.88rem; }
 .metric-xl { font-size: 2.3rem; font-weight: 800; letter-spacing: -0.035em; }
 @media (max-width: 720px) { .metric-xl { font-size: 1.8rem; } }
 .subtle-note { font-size: 0.76rem; color: var(--text-muted); }
+
+/* ============================================================================
+   Herman — interactive financial conversation UI
+   A calm, distinct identity: a warm gradient mark, left-anchored answer cards
+   with a brand accent rail, right-anchored user bubbles. Deliberately not a
+   generic chat-bubble clone.
+   ========================================================================== */
+.herman-page { max-width: 860px; }
+
+.herman-mark {
+  width: 46px; height: 46px; flex-shrink: 0;
+  border-radius: 14px;
+  display: grid; place-items: center;
+  font-weight: 800; font-size: 1.05rem; color: #fff;
+  background: linear-gradient(135deg, var(--slate-900) 0%, var(--brand-600) 100%);
+  box-shadow: 0 6px 18px -6px rgba(79, 70, 229, 0.5);
+}
+.herman-mark.sm { width: 34px; height: 34px; border-radius: 11px; font-size: 0.85rem; }
+
+.herman-scroll { max-height: 56vh; overflow-y: auto; padding-right: 6px; }
+@media (max-width: 720px) { .herman-scroll { max-height: 62vh; } }
+
+/* --- turns --- */
+.herman-thread { display: flex; flex-direction: column; gap: 18px; padding: 4px 0; }
+.herman-turn { display: flex; align-items: flex-start; gap: 12px; }
+.herman-turn-user { justify-content: flex-end; }
+
+.herman-user-bubble {
+  background: var(--brand-600); color: #fff;
+  padding: 10px 14px; border-radius: 14px 14px 4px 14px;
+  max-width: 78%; line-height: 1.5; font-size: 0.92rem;
+  box-shadow: var(--shadow-sm);
+}
+
+.herman-bubble {
+  flex: 1; min-width: 0;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-left: 3px solid var(--brand-500);
+  border-radius: 4px 14px 14px 14px;
+  padding: 14px 16px;
+  box-shadow: var(--shadow-sm);
+}
+.herman-name {
+  display: flex; align-items: center; flex-wrap: wrap; gap: 8px;
+  font-weight: 750; font-size: 0.82rem; letter-spacing: 0.01em;
+  color: var(--slate-700); margin-bottom: 6px;
+}
+.herman-twin {
+  font-weight: 600; font-size: 0.68rem; text-transform: uppercase; letter-spacing: 0.05em;
+  color: var(--brand-700); background: var(--brand-50);
+  border: 1px solid var(--brand-100); border-radius: var(--r-pill);
+  padding: 2px 8px;
+}
+.herman-text { white-space: pre-wrap; line-height: 1.6; color: var(--text-soft); margin: 0; }
+.herman-text.is-soft { color: var(--text-muted); }
+.herman-sub { margin: 8px 0 0; font-size: 0.84rem; color: var(--text-muted); line-height: 1.55; }
+
+.herman-retry {
+  margin-top: 10px; padding: 6px 12px;
+  border: 1px solid var(--border); border-radius: var(--r-md);
+  background: var(--surface-2); color: var(--text); font-weight: 650; font-size: 0.82rem;
+  cursor: pointer; transition: border-color var(--dur) var(--ease), background var(--dur) var(--ease);
+}
+.herman-retry:hover { border-color: var(--brand-300); background: var(--brand-50); }
+
+/* --- welcome + starter cards --- */
+.herman-welcome { display: flex; flex-direction: column; gap: 18px; padding: 6px 0 4px; }
+.herman-starters { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+@media (max-width: 620px) { .herman-starters { grid-template-columns: 1fr; } }
+.herman-starter {
+  display: flex; align-items: center; gap: 10px; text-align: left;
+  padding: 13px 14px; border: 1px solid var(--border); border-radius: var(--r-lg);
+  background: var(--surface); cursor: pointer;
+  transition: transform var(--dur) var(--ease), box-shadow var(--dur) var(--ease), border-color var(--dur) var(--ease);
+}
+.herman-starter:hover { transform: translateY(-2px); box-shadow: var(--shadow-md); border-color: var(--brand-300); }
+.herman-starter .hs-tag {
+  flex-shrink: 0; font-size: 0.66rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.05em;
+  color: var(--brand-700); background: var(--brand-50); border-radius: var(--r-pill); padding: 3px 8px;
+}
+.herman-starter .hs-label { flex: 1; font-size: 0.88rem; font-weight: 600; color: var(--text); line-height: 1.4; }
+.herman-starter .hs-go { color: var(--slate-400); font-weight: 700; }
+.herman-starter:hover .hs-go { color: var(--brand-500); }
+
+/* --- "Why this matters" (RAG) --- */
+.herman-why {
+  margin-top: 12px; padding: 12px 14px;
+  background: var(--info-50); border: 1px solid #bfdbfe; border-radius: var(--r-md);
+}
+.herman-why .hw-head { font-weight: 700; font-size: 0.84rem; color: var(--slate-800); display: flex; gap: 7px; align-items: center; }
+.herman-why .hw-list { margin: 6px 0 4px; padding-left: 20px; display: flex; flex-direction: column; gap: 3px; }
+.herman-why .hw-list li { font-size: 0.84rem; color: var(--text-soft); }
+
+/* --- composer --- */
+.herman-composer-row { display: flex; align-items: flex-start; justify-content: space-between; gap: 12px; }
+.herman-quick { display: flex; flex-wrap: wrap; gap: 8px; flex: 1; }
+@media (max-width: 620px) {
+  .herman-composer-row { flex-direction: column; align-items: stretch; }
+  .herman-composer-row .btn { width: 100%; }
+}
+
+/* ============================================================================
+   Herman avatar — an original, friendly banknote companion.
+   Animation is state-driven and OFF under prefers-reduced-motion.
+   ========================================================================== */
+.herman-avatar { display: inline-grid; place-items: center; flex-shrink: 0; overflow: visible; }
+.herman-turn-avatar { margin-top: 2px; }
+.herman-avatar svg { overflow: visible; }
+.herman-avatar .ha-body { transform-box: fill-box; transform-origin: center; }
+.herman-avatar .ha-arm { transform-box: fill-box; transform-origin: 100% 100%; }
+.herman-avatar .ha-arm-r { transform-origin: 0% 100%; }
+.herman-avatar .ha-think { opacity: 0; }
+.herman-avatar .ha-mouth { transition: d 0.15s var(--ease); }
+
+/* idle — a calm float */
+.herman-avatar.is-idle .ha-body { animation: ha-float 3.6s ease-in-out infinite; }
+
+/* listening — attentive: lifts slightly, eyes widen */
+.herman-avatar.is-listening .ha-body { animation: ha-float 2s ease-in-out infinite; }
+.herman-avatar.is-listening .ha-eye { transform: scaleY(1.15); transform-box: fill-box; transform-origin: center; }
+
+/* thinking — gentle tilt + blink + dots */
+.herman-avatar.is-thinking .ha-body { animation: ha-tilt 1.6s ease-in-out infinite; }
+.herman-avatar.is-thinking .ha-eyes { animation: ha-blink 1.8s step-end infinite; transform-box: fill-box; transform-origin: center; }
+.herman-avatar.is-thinking .ha-think { opacity: 1; }
+.herman-avatar.is-thinking .ha-dot { animation: ha-dot 1.2s ease-in-out infinite; }
+.herman-avatar.is-thinking .ha-dot-2 { animation-delay: 0.15s; }
+.herman-avatar.is-thinking .ha-dot-3 { animation-delay: 0.3s; }
+
+/* speaking — mouth opens/closes, body bobs */
+.herman-avatar.is-speaking .ha-body { animation: ha-bob 0.5s ease-in-out infinite; }
+.herman-avatar.is-speaking .ha-mouth { animation: ha-talk 0.34s ease-in-out infinite; transform-box: fill-box; transform-origin: center; }
+
+/* error — a small concerned look */
+.herman-avatar.is-error .ha-mouth { d: path("M50 74 Q60 66 70 74"); }
+.herman-avatar.is-error .ha-body { animation: ha-shake 0.4s ease-in-out 2; }
+
+@keyframes ha-float { 0%,100% { transform: translateY(0); } 50% { transform: translateY(-4px); } }
+@keyframes ha-bob   { 0%,100% { transform: translateY(0); } 50% { transform: translateY(-2px); } }
+@keyframes ha-tilt  { 0%,100% { transform: rotate(-3deg); } 50% { transform: rotate(3deg); } }
+@keyframes ha-shake { 0%,100% { transform: translateX(0); } 25% { transform: translateX(-3px); } 75% { transform: translateX(3px); } }
+@keyframes ha-blink { 0%,92%,100% { transform: scaleY(1); } 95% { transform: scaleY(0.1); } }
+@keyframes ha-dot   { 0%,100% { transform: translateY(0); opacity: 0.4; } 50% { transform: translateY(-3px); opacity: 1; } }
+@keyframes ha-talk  { 0%,100% { transform: scaleY(0.4); } 50% { transform: scaleY(1.25); } }
+
+/* typing dots in the loading bubble */
+.herman-typing { display: inline-flex; gap: 4px; align-items: center; }
+.herman-typing i { width: 6px; height: 6px; border-radius: 50%; background: var(--brand-400); animation: ha-dot 1.1s ease-in-out infinite; }
+.herman-typing i:nth-child(2) { animation-delay: 0.15s; }
+.herman-typing i:nth-child(3) { animation-delay: 0.3s; }
+
+/* speak / stop control */
+.herman-speak { margin-top: 10px; }
+.hspk-btn {
+  padding: 5px 12px; border: 1px solid var(--border); border-radius: var(--r-pill);
+  background: var(--surface-2); color: var(--text-soft); font-size: 0.8rem; font-weight: 650;
+  cursor: pointer; transition: border-color var(--dur) var(--ease), color var(--dur) var(--ease);
+}
+.hspk-btn:hover { border-color: var(--brand-300); color: var(--brand-700); }
+
+@media (prefers-reduced-motion: reduce) {
+  .herman-avatar *, .herman-typing i {
+    animation: none !important;
+    transition: none !important;
+  }
+  .herman-avatar.is-thinking .ha-think { opacity: 1; }
+}
+
+/* ---- Reports / export page ---- */
+.report-list { margin: 6px 0 0; padding-left: 18px; display: flex; flex-direction: column; gap: 5px; }
+.report-list li { font-size: 0.88rem; color: var(--text-soft); }
+.report-list-ok li::marker { color: var(--ok-500); }
+.report-list-no li::marker { color: var(--bad-500); }
+.report-usage { border-left: 3px solid var(--brand-400); background: var(--brand-50); padding: 12px 14px; border-radius: 0 var(--r-md) var(--r-md) 0; }
+.report-usage .ru-title { font-weight: 700; font-size: 0.8rem; text-transform: uppercase; letter-spacing: 0.05em; color: var(--brand-700); margin-bottom: 4px; }

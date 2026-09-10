@@ -1,14 +1,13 @@
-"""Registration must validate input and be atomic (no orphan student rows)."""
+"""Registration must validate input and be atomic (no orphan account rows)."""
 
 import pytest
 
 from database import IntegrityError
 
 VALID = {
-    "student_id_str": "STU900",
-    "name": "New Student",
-    "email": "new@university.edu",
-    "username": "newstudent",
+    "name": "Alex Doe",
+    "mobile_number": "+91 98765 43210",
+    "username": "alexd",
     "password": "secret123",
 }
 
@@ -18,8 +17,30 @@ def test_missing_field_is_400(client):
     assert resp.status_code == 400
 
 
-def test_duplicate_student_is_409(client, monkeypatch):
-    # Pre-check finds an existing student/user.
+def test_missing_mobile_is_400(client):
+    resp = client.post("/api/auth/register",
+                       json={"name": "x", "username": "u", "password": "p"})
+    assert resp.status_code == 400
+
+
+@pytest.mark.parametrize("bad", ["12345", "not-a-number", "+", "98765abc432", ""])
+def test_invalid_mobile_is_400(client, monkeypatch, bad):
+    monkeypatch.setattr("routes.auth.execute_query", lambda *a, **k: None)
+    monkeypatch.setattr("routes.auth.run_transaction", lambda fn: 1)
+    resp = client.post("/api/auth/register", json={**VALID, "mobile_number": bad})
+    assert resp.status_code == 400
+
+
+def test_no_student_id_required(client, monkeypatch):
+    # a payload with NO student id must still register fine
+    monkeypatch.setattr("routes.auth.execute_query", lambda *a, **k: None)
+    monkeypatch.setattr("routes.auth.run_transaction", lambda fn: 1)
+    resp = client.post("/api/auth/register", json=VALID)
+    assert resp.status_code == 201
+
+
+def test_duplicate_account_is_409(client, monkeypatch):
+    # Pre-check finds an existing account/user.
     monkeypatch.setattr("routes.auth.execute_query", lambda *a, **k: {"id": 1})
     resp = client.post("/api/auth/register", json=VALID)
     assert resp.status_code == 409

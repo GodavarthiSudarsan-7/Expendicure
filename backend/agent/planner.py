@@ -110,7 +110,7 @@ def deterministic_plan(message, ctx, registry) -> Plan:
     # concept / education question -> RAG
     if re.search(r"\b(what (is|are|does)|explain|how does|tell me about|define|meaning of)\b", text) \
             and re.search(r"\b(safety buffers?|discretionary|emergency funds?|budget(ing|s)?|recurring|"
-                          r"subscriptions?|savings?|cash ?flow|student finance|financial)\b", text) \
+                          r"subscriptions?|savings?|cash ?flow|personal finance|student finance|financial)\b", text) \
             and not amount:
         return Plan(intent="KNOWLEDGE", tool="retrieve_financial_knowledge",
                     arguments={"query": (message or "")[:200]}, ok=True, note="deterministic")

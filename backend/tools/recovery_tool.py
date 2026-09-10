@@ -9,7 +9,7 @@ from tools._goals import goals_for
 class EvaluateRecoveryPlanTool(Tool):
     name = "evaluate_recovery_plan"
     description = (
-        "Recovery Mode: the student ALREADY made an unexpected spend and wants "
+        "Recovery Mode: the user ALREADY made an unexpected spend and wants "
         "to get back on track. Models the spend as a shock to the current "
         "twin, measures how far the projected balance falls below the safety "
         "buffer, and returns deterministic, simulated recovery options (reduce "

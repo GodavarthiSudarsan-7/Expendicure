@@ -14,7 +14,7 @@ bad week instead of becoming a bad month.
 
 ## How large should it be
 
-A common starting point for a student is two to four weeks of essential
+A common starting point is two to four weeks of essential
 spending: rent share, food, transport, and any fixed subscriptions. If your
 income is irregular, lean toward the higher end.
 

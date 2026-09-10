@@ -7,7 +7,7 @@ from tools.base import Tool, ToolResult
 class GetTransactionsTool(Tool):
     name = "get_transactions"
     description = (
-        "Look up the student's recorded transactions with optional filters: date range, "
+        "Look up the user's recorded transactions with optional filters: date range, "
         "category, merchant substring, amount range, direction. Read-only. Returns a "
         "capped list of compact rows plus a count."
     )

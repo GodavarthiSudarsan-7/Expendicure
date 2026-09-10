@@ -5,7 +5,7 @@ from tools.base import Tool, ToolResult
 class GetFinancialAnomaliesTool(Tool):
     name = "get_financial_anomalies"
     description = (
-        "Deterministic scan of the student's history for unusual events: large amounts, "
+        "Deterministic scan of the user's history for unusual events: large amounts, "
         "category spikes, likely duplicates, budget breaches, new large merchants. "
         "Facts only, each with evidence and a severity (low/medium/high)."
     )

@@ -79,8 +79,8 @@ export default function Settings() {
             <CardHead><h3>Profile</h3></CardHead>
             <CardBody>
               <KV k="Name" v={user?.name} />
-              <KV k="Email" v={user?.email} />
-              <KV k="Student ID" v={user?.student_id} />
+              <KV k="Mobile number" v={user?.mobile_number || '—'} />
+              <KV k="Email" v={user?.email || '—'} />
             </CardBody>
           </Card>
 

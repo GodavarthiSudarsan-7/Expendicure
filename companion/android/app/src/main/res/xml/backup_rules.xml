@@ -1,0 +1,8 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Backup is disabled for the whole app (android:allowBackup="false"); this
+     file exists only to satisfy the manifest reference. Nothing is ever backed
+     up, so the encrypted token store never leaves the device. -->
+<full-backup-content>
+    <exclude domain="sharedpref" path="." />
+    <exclude domain="file" path="." />
+</full-backup-content>

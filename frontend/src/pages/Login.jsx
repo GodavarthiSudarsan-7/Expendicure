@@ -27,7 +27,7 @@ export default function Login() {
           <strong style={{ fontSize: '1.15rem' }}>Expendicure</strong>
         </div>
         <div>
-          <div className="big">Your student financial copilot.</div>
+          <div className="big">Your personal financial copilot.</div>
           <p className="muted">Not just where your money went — what happens if you spend it. Deterministic forecasts, affordability checks and what-if simulations.</p>
           <div className="points">
             <div>✓&nbsp; “Can I afford this?” — answered with math, not vibes</div>

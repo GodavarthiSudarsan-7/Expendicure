@@ -3,12 +3,12 @@ import { Link } from 'react-router-dom';
 import {
   AreaChart, Area, XAxis, YAxis, Tooltip, ResponsiveContainer, ReferenceLine, CartesianGrid,
 } from 'recharts';
-import { twinApi, forecastApi, anomaliesApi, transactionsApi } from '../api';
+import { twinApi, forecastApi, anomaliesApi, transactionsApi, bankApi } from '../api';
 import { useAsync } from '../hooks/useAsync';
 import { useAuth } from '../context/AuthContext';
 import {
   Card, CardHead, CardBody, StatCard, Badge, Button, EmptyState, ErrorState,
-  Skeleton, SectionHeader, SkeletonCards,
+  Skeleton, SectionHeader, SkeletonCards, Alert,
 } from '../components/ui';
 import { money, signedMoney, dateTiny, dateShort, greeting, titleCase } from '../lib/format';
 import { deriveHealthStatus, anomalyMeta, severityTone } from '../lib/status';
@@ -18,6 +18,8 @@ export default function Dashboard() {
   const twin = useAsync(() => twinApi.state(), []);
   const forecast = useAsync(() => forecastApi.get({ horizonDays: 30 }), []);
   const anomalies = useAsync(() => anomaliesApi.get(), []);
+  const bankReview = useAsync(() => bankApi.events('pending').catch(() => ({ events: [] })), []);
+  const pendingCount = (bankReview.data?.events || []).length;
   const txns = useAsync(() => transactionsApi.list(), []);
 
   const t = twin.data;
@@ -53,6 +55,13 @@ export default function Dashboard() {
           <Link to="/ask" className="btn btn-secondary btn-lg">Ask Herman</Link>
         </div>
       </div>
+
+      {pendingCount > 0 && (
+        <Alert tone="info">
+          {pendingCount} bank transaction{pendingCount === 1 ? '' : 's'} detected and waiting for your review.{' '}
+          <Link to="/connections"><strong>Review now →</strong></Link>
+        </Alert>
+      )}
 
       {twin.error && <ErrorState message={twin.error} onRetry={twin.reload} />}
 
@@ -222,6 +231,12 @@ export default function Dashboard() {
             )}
           </CardBody>
         </Card>
+        <div className="row between wrap gap-3 mt-3" style={{ alignItems: 'center' }}>
+          <span className="muted" style={{ fontSize: '0.82rem' }}>
+            Take your financial picture elsewhere — export a structured snapshot for another AI assistant.
+          </span>
+          <Link to="/reports" className="btn btn-sm btn-ghost">Export financial profile →</Link>
+        </div>
       </div>
     </>
   );

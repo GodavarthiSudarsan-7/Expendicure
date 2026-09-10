@@ -5,7 +5,7 @@ from tools._twin import twin_for, twin_summary
 class GetFinancialTwinTool(Tool):
     name = "get_financial_twin"
     description = (
-        "Read the student's current Financial Digital Twin — balance, safety buffer, "
+        "Read the user's current Financial Digital Twin — balance, safety buffer, "
         "discretionary buffer, month income/spending/net, top categories and upcoming "
         "commitments. Use for 'how am I doing', 'what's my balance', general status."
     )

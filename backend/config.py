@@ -37,6 +37,6 @@ class Config:
     DEBUG = _bool_env('FLASK_DEBUG', default=False)
 
     # Financial defaults (used by the deterministic finance engine from Phase 3 onwards).
-    # Kept here so there is a single documented fallback when a student has no
+    # Kept here so there is a single documented fallback when an account has no
     # account-level safety buffer configured.
     SAFETY_BUFFER = _decimal_env('SAFETY_BUFFER', default='2000')

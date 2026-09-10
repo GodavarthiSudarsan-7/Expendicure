@@ -19,7 +19,7 @@ from tools import build_default_registry, make_context
 
 CORPUS_SOURCES = {
     "safety_buffer", "discretionary_spending", "budgeting",
-    "recurring_payments", "emergency_fund", "student_finance",
+    "recurring_payments", "emergency_fund", "personal_finance",
 }
 
 

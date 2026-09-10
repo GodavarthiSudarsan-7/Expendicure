@@ -113,7 +113,7 @@ CADENCE_MONTHLY = "monthly"
 TOOL_SPEC = {
     "name": "simulate_financial_scenario",
     "description": (
-        "Run a deterministic, in-memory what-if against the student's Financial "
+        "Run a deterministic, in-memory what-if against the user's Financial "
         "Digital Twin: project the baseline balance versus a scenario balance and "
         "compare their minimum balances, ending balances, safety-buffer impact, "
         "and (for a one-off purchase) the Phase-4 affordability verdict. Never "

@@ -73,8 +73,22 @@ def test_tools_layer_does_not_import_agent_or_flask_or_db():
     _assert_never_imports("tools", {"agent", "routes", "flask", "database"})
 
 
+# --------------------------------------------------------------- ingestion/ (Phase 15)
+def test_ingestion_layer_is_pure():
+    # ingestion/ parses bank SMS deterministically: stdlib + finance.money only.
+    _assert_never_imports("ingestion", _ML_AND_WEB | _LLM | _DB | {
+        "requests", "agent", "tools", "routes", "ai", "decision", "knowledge", "flask",
+    })
+
+
+def test_ingestion_layer_only_leans_on_finance():
+    mods = {mod for _, mod in _imported_top_levels("ingestion")}
+    assert mods <= {"re", "hashlib", "secrets", "datetime", "decimal", "dataclasses",
+                    "typing", "ingestion", "finance"}
+
+
 # --------------------------------------------------------------- read-only guarantee
-@pytest.mark.parametrize("pkg", ["finance", "decision", "knowledge"])
+@pytest.mark.parametrize("pkg", ["finance", "decision", "knowledge", "ingestion"])
 def test_pure_layers_have_no_financial_write_sql(pkg):
     for path in pathlib.Path(pkg).rglob("*.py"):
         up = path.read_text(encoding="utf-8").upper()

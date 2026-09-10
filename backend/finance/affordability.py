@@ -84,7 +84,7 @@ TIGHT_MARGIN_FRACTION = Decimal("0.10")
 TOOL_SPEC = {
     "name": "check_affordability",
     "description": (
-        "Deterministically assess whether the student can afford a prospective "
+        "Deterministically assess whether the user can afford a prospective "
         "purchase, given their Financial Digital Twin. Returns a structured "
         "verdict, a 0-100 safety score, the projected minimum balance over the "
         "horizon, and human-readable reasons. The caller must not alter any "

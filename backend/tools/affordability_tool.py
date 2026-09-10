@@ -6,7 +6,7 @@ from tools._twin import twin_for
 class CheckAffordabilityTool(Tool):
     name = "check_affordability"
     description = (
-        "Deterministically decide whether the student can afford a one-off purchase. "
+        "Deterministically decide whether the user can afford a one-off purchase. "
         "Projects the balance forward with the purchase applied and compares the low "
         "point to the safety buffer. Returns verdict (affordable/tight/not_affordable), "
         "a 0-100 score, projected minimum balance, and reasons."

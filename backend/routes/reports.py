@@ -1,10 +1,121 @@
-from flask import Blueprint, jsonify, request
-from database import execute_query
 import datetime
-from date_filters import month_bounds, format_year_month
+import json
+
+from flask import Blueprint, Response, jsonify, request
+
+from database import execute_query
+from date_filters import month_bounds, format_year_month, parse_iso_date
+from finance_db import get_repository
 from middleware import token_required
+from reports_export import (
+    DEFAULT_PERIOD,
+    PERIOD_PRESETS,
+    build_financial_profile,
+    render_markdown,
+    resolve_period,
+)
 
 reports_bp = Blueprint('reports', __name__)
+
+
+def _safe_filename(name: str) -> str:
+    keep = "".join(c if c.isalnum() or c in "-_" else "-" for c in (name or "profile"))
+    return keep.strip("-") or "profile"
+
+
+@reports_bp.route('/financial-profile', methods=['GET'], strict_slashes=False)
+@token_required
+def financial_profile(current_student):
+    """Portable, user-scoped financial profile export.
+
+    Query params:
+      period  one of 30d | 3m (default) | 6m | 12m | all | custom
+      from,to YYYY-MM-DD, required when period=custom
+      format  json (default) | markdown | pdf
+
+    The report is always scoped to the authenticated account. It never contains
+    raw SMS, passwords, session tokens, ingest tokens or full account numbers.
+    """
+    student_id = current_student['id']
+    fmt = (request.args.get('format') or 'json').lower()
+    if fmt not in ('json', 'markdown', 'md', 'text', 'pdf'):
+        return jsonify({"error": "format must be json, markdown or pdf"}), 400
+
+    preset = (request.args.get('period') or DEFAULT_PERIOD).lower()
+    if preset not in PERIOD_PRESETS:
+        return jsonify({"error": f"period must be one of: {', '.join(PERIOD_PRESETS)}"}), 400
+
+    custom_from = custom_to = None
+    if preset == 'custom':
+        try:
+            custom_from = parse_iso_date(request.args.get('from', ''))
+            custom_to = parse_iso_date(request.args.get('to', ''))
+        except ValueError:
+            return jsonify({"error": "custom period requires valid 'from' and 'to' "
+                                     "YYYY-MM-DD dates"}), 400
+
+    as_of = datetime.date.today()
+
+    earliest = None
+    if preset == 'all':
+        row = execute_query(
+            "SELECT MIN(payment_date) AS first_date FROM transactions WHERE student_id = %s",
+            (student_id,), fetch_one=True,
+        )
+        earliest = (row or {}).get('first_date')
+        if isinstance(earliest, datetime.datetime):
+            earliest = earliest.date()
+
+    try:
+        period = resolve_period(
+            preset, as_of=as_of, custom_from=custom_from, custom_to=custom_to,
+            earliest_txn=earliest,
+        )
+    except ValueError as exc:
+        return jsonify({"error": str(exc)}), 400
+
+    report = build_financial_profile(
+        get_repository(),
+        student_id,
+        account_name=current_student.get('name'),
+        period=period,
+        as_of=as_of,
+        generated_at=datetime.datetime.now().isoformat(timespec='seconds'),
+    )
+
+    stem = f"expendicure-financial-profile-{_safe_filename(current_student.get('name'))}-{period['to']}"
+
+    if fmt in ('markdown', 'md', 'text'):
+        body = render_markdown(report)
+        return Response(
+            body, mimetype='text/markdown; charset=utf-8',
+            headers={'Content-Disposition': f'attachment; filename="{stem}.md"'},
+        )
+
+    if fmt == 'pdf':
+        try:
+            from reports_export import render_pdf
+            pdf_bytes = render_pdf(report)
+        except Exception:  # fpdf2 missing or rendering issue — degrade, never 500
+            body = render_markdown(report)
+            return Response(
+                body, mimetype='text/markdown; charset=utf-8',
+                headers={
+                    'Content-Disposition': f'attachment; filename="{stem}.md"',
+                    'X-Report-Fallback': 'pdf-unavailable',
+                },
+            )
+        return Response(
+            pdf_bytes, mimetype='application/pdf',
+            headers={'Content-Disposition': f'attachment; filename="{stem}.pdf"'},
+        )
+
+    # json (default) — pretty-printed so another tool / person can read it raw
+    return Response(
+        json.dumps(report, indent=2, ensure_ascii=False),
+        mimetype='application/json',
+        headers={'Content-Disposition': f'attachment; filename="{stem}.json"'},
+    )
 
 
 @reports_bp.route('/chart-data', methods=['GET'])

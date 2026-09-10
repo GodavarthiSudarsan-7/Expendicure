@@ -108,3 +108,37 @@ export const goalsApi = {
   remove: (id) => del(`/goals/${id}`),
   archive: (id) => del(`/goals/${id}?archive=1`),
 };
+
+/* ---- Portable Financial Profile export ----
+   The backend builds a user-scoped, deterministic snapshot (JSON / Markdown /
+   PDF). The frontend only chooses the period + format and saves the file —
+   it never assembles or calculates report figures. */
+export const reportsApi = {
+  // returns { blob, filename } for a chosen format
+  financialProfile: async ({ period = '3m', from, to, format = 'json' } = {}) => {
+    const params = { period, format };
+    if (period === 'custom') { params.from = from; params.to = to; }
+    const res = await client.get('/reports/financial-profile', { params, responseType: 'blob' });
+    const cd = res.headers['content-disposition'] || '';
+    const m = /filename="?([^"]+)"?/.exec(cd);
+    return { blob: res.data, filename: m ? m[1] : `financial-profile.${format === 'markdown' ? 'md' : format}` };
+  },
+};
+
+/* ---- Bank SMS connection + review (Phase 15, review-only) ----
+   The backend verifies the sender, extracts the transaction deterministically,
+   and only creates a `needs_confirmation` event. Nothing enters the Financial
+   Twin until the user confirms here. Raw SMS text is never stored or returned. */
+export const bankApi = {
+  connections: () => get('/bank/connections'),
+  createConnection: (payload) => post('/bank/connections', payload),
+  updateConnection: (id, payload) => put(`/bank/connections/${id}`, payload),
+  rotateToken: (id) => post(`/bank/connections/${id}/rotate-token`),
+  removeConnection: (id) => del(`/bank/connections/${id}`),
+  events: (status) => get('/bank/sms-events', status ? { status } : undefined),
+  // demo affordance: what a companion app / automation would POST automatically
+  ingest: (sender, body) => post('/bank/sms-events', { sender, body }),
+  editEvent: (id, payload) => client.patch(`/bank/sms-events/${id}`, payload).then((r) => r.data),
+  confirmEvent: (id, payload) => post(`/bank/sms-events/${id}/confirm`, payload || {}),
+  ignoreEvent: (id) => post(`/bank/sms-events/${id}/ignore`, {}),
+};

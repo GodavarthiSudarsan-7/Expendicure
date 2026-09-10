@@ -1,16 +1,16 @@
-# Student finance
+# Personal finance
 
-Student finances have a particular shape: income is lumpy and often irregular —
-a stipend, a scholarship instalment, occasional freelance or part-time pay —
-while many costs are fixed and monthly. That mismatch is why timing matters so
-much. The same purchase can be comfortable the week after your stipend lands and
-risky the week before.
+Personal finances often have an uneven shape: income can be lumpy or irregular —
+a monthly salary, an occasional bonus, freelance or side income — while many
+costs are fixed and monthly. That mismatch is why timing matters so much. The
+same purchase can be comfortable the week after you are paid and risky the week
+before.
 
 ## Cash flow beats net worth
 
-For most students, the useful question is not "am I rich?" but "will I stay
-above my safety buffer until my next reliable inflow?". Watching the projected
-low point over the next few weeks is more informative than the balance today.
+For most people, the useful question is not "am I rich?" but "will I stay above
+my safety buffer until my next reliable inflow?". Watching the projected low
+point over the next few weeks is more informative than the balance today.
 
 ## Small leaks
 

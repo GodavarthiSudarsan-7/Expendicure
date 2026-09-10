@@ -1,4 +1,4 @@
-"""Per-student account settings: opening balance, safety buffer, as-of date.
+"""Per-account settings: opening balance, safety buffer, as-of date.
 
 The live balance is never stored — it is derived by the finance repository
 (opening_balance + credits - debits up to today).

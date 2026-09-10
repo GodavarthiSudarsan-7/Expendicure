@@ -1,10 +1,43 @@
-# Expendicure - Student Banking & Budget Tracking Application
+# Expendicure — Personal Financial Intelligence Platform
 
-Expendicure is a student-focused banking and budget tracking web application that allows college students to record payments, categorize expenses, set monthly budgets, and view spending analytics through graphs.
+Expendicure is a personal finance copilot for anyone. It doesn't just tell you
+where your money went — it shows what happens if you spend it: a deterministic
+Financial Digital Twin, cash-flow forecasts, affordability and what-if
+simulations, savings-goal impact, Recovery Mode, and Herman, a local-first AI
+that explains (but never invents) the numbers.
+
+**Don't just track where your money went. Understand what happens before you
+spend it** — see, simulate, decide.
+
+## Local-first & privacy
+
+Expendicure is designed to run locally. Financial data and AI processing remain
+within the user's local environment by default:
+
+- **No cloud AI.** The default execution path does not call OpenAI, Anthropic,
+  Gemini or any other external AI/embedding/vector service, and requires no API
+  key for them. Herman's language model runs locally through **Ollama**; the RAG
+  index and retrieval are local.
+- **No third-party financial data brokers or analytics/advertising SDKs.**
+- **Bank SMS.** The Android companion filters and (where possible) parses
+  transaction notifications *on the phone*, then sends a small structured event
+  to the user's own Expendicure server. Raw SMS is not stored by Expendicure.
+  Every detected transaction is review-only — nothing enters the Financial Twin
+  until the user presses Confirm.
+- **Portable Financial Profile.** The user chooses to export a snapshot (JSON /
+  Markdown / PDF) and chooses where to take it. Expendicure never uploads or
+  forwards it.
+
+Wording that must stay precise: if the companion ever forwards a raw SMS body
+over the LAN as a compatibility fallback, that raw SMS *has left the phone* —
+this mode is labelled **"Private local-network fallback"** and is never
+described as "SMS never leaves your phone." The frontend loads the Inter webfont
+from Google Fonts (a CDN request); self-host it if that request is unacceptable
+for your deployment.
 
 ## Features
 
-### 1. Student Dashboard
+### 1. Dashboard
 - Shows total balance
 - Displays total monthly spending
 - Shows remaining budget
@@ -47,13 +80,19 @@ Expendicure is a student-focused banking and budget tracking web application tha
 
 ## Database Schema
 
-The application uses four main tables:
+> **Note on `student_id`.** The owner table is still named `students` and the
+> ownership foreign key is still `student_id` — this is an **internal identifier
+> only** and is never shown to users. A comprehensive `students → accounts` /
+> `student_id → user_id` rename is deferred (it would touch ~80 files, 8 table
+> schemas and every FK; see the Phase-16 note). The user-facing "Student ID"
+> concept has been removed everywhere.
 
-### Students
-- `id` (INT, PK, Auto Increment)
-- `student_id` (VARCHAR, Unique)
+### Accounts (`students` table)
+- `id` (INT, PK) — the internal owner id used by every ownership check
+- `student_id` (VARCHAR, Unique) — opaque auto-generated account reference (not shown)
 - `name` (VARCHAR)
-- `email` (VARCHAR, Unique)
+- `mobile_number` (VARCHAR(20), Unique, nullable) — the account's contact identity (**added in `009_user_mobile_number.sql`**)
+- `email` (VARCHAR, Unique, **nullable** as of `009`)
 - `created_at` (TIMESTAMP)
 
 ### Categories
@@ -189,22 +228,22 @@ python scripts/migrate.py --status   # list applied / pending, change nothing
 ## API Endpoints
 
 All endpoints except `/api/health`, `/api/auth/*` require a
-`Authorization: Bearer <token>` header. The authenticated student is taken
+`Authorization: Bearer <token>` header. The authenticated account is taken
 from the token — endpoints do **not** accept a `student_id` parameter.
 
 ### Health
 - GET `/api/health` - Liveness check (`{"status": "ok"}`)
 
 ### Auth
-- POST `/api/auth/register` - Create a student + user (atomic)
-- POST `/api/auth/login` - Returns `{ token, student }`
+- POST `/api/auth/register` - Create an account (atomic). Body: `name`, `mobile_number`, `username`, `password` (`email` optional). No user-facing Student ID.
+- POST `/api/auth/login` - Returns `{ token, user }` (id, name, email, mobile_number)
 
-### Students
-- GET `/api/students/` - Returns the authenticated student only
-- GET `/api/students/<id>` - Only allowed for your own id (else 403)
+### Account
+- GET `/api/students/` - Returns the authenticated account's own profile (id, name, email, mobile_number)
+- GET `/api/students/<id>` - Only your own id (else 403). Kept at this path for backward compatibility.
 
 ### Transactions
-- GET `/api/transactions` - Transactions for the authenticated student
+- GET `/api/transactions` - Your transactions
 - POST `/api/transactions` - Add a transaction. Validates amount > 0, date, category.
   Optional `direction`: `"debit"` (money out, default) or `"credit"` (money in).
 - PUT `/api/transactions/<id>` - Update transaction category
@@ -215,44 +254,68 @@ from the token — endpoints do **not** accept a `student_id` parameter.
 - PUT `/api/account` - Upsert opening balance / safety buffer / as-of date (all optional, non-negative)
 
 ### Recurring transactions
-- GET `/api/recurring?include_inactive=0` - The student's recurring items
+- GET `/api/recurring?include_inactive=0` - Your recurring items
 - POST `/api/recurring` - Create one (`label`, `merchant_name`, `amount`, `direction`, `cadence` weekly|monthly, `day_of_month` or `weekday`, `next_date`)
 - PUT `/api/recurring/<id>` - Update fields (partial)
 - DELETE `/api/recurring/<id>` - Delete
 
 ### Savings goals (Phase 13)
-- GET `/api/goals?status=active` - The authenticated student's savings goals (ownership-scoped; another student's goal is never returned)
+- GET `/api/goals?status=active` - Your savings goals (ownership-scoped; another account's goal is never returned)
 - GET `/api/goals/<id>` - One goal, only if it belongs to you (else 404)
-- POST `/api/goals` - Create (`name`, `target_amount` > 0, `current_amount` >= 0, `monthly_contribution` >= 0, `target_date`; no overfunding — `current_amount <= target_amount`). A `student_id` in the body is ignored.
+- POST `/api/goals` - Create (`name`, `target_amount` > 0, `current_amount` >= 0, `monthly_contribution` >= 0, `target_date`; no overfunding — `current_amount <= target_amount`). A `student_id` in the body is ignored (identity comes from the token).
 - PUT `/api/goals/<id>` - Partial update (same validation; 404 if not yours)
 - DELETE `/api/goals/<id>` - Delete, or `?archive=1` to set `status = archived`
 - Goal **progress**, **impact** and **recovery** figures are never computed here — they come from `decision/goal_progress.py`, `decision/goal_impact.py` and `decision/recovery.py` via Herman's `get_savings_goals` / `evaluate_recovery_plan` tools.
 
+### Bank SMS → Financial Twin (Phase 15, review-only)
+
+> **The Expendicure web app cannot and does not read your phone's SMS inbox.** A companion on the device that receives the SMS forwards only `{sender, body}` for the sender you configure. See `companion/README.md`.
+
+- GET `/api/bank/connections` — the user's configured bank SMS sources + `pending_review` count
+- POST `/api/bank/connections` — `{bank_name, sender_id, masked_account?}` → creates a connection and returns a **one-time `ingest_token`** (shown once; sha256-hashed at rest; rotatable)
+- PUT `/api/bank/connections/<id>` — toggle `enabled`, edit `bank_name` / `masked_account`
+- POST `/api/bank/connections/<id>/rotate-token` · DELETE `/api/bank/connections/<id>` (cascades its events)
+- **POST `/api/bank/sms-events`** — the ingestion endpoint. Auth: a user JWT **or** an `X-Ingest-Token` header. Body: `{ sender, body }`. Deterministic pipeline: sender must match an **enabled** connection → OTP/promo/noise rejected → `ingestion/sms_parser.py` extracts (amount, direction, date, merchant, masked account, ref id) → `ingestion/fingerprint.py` dedup → a `needs_confirmation` / `needs_review` event is created. Responses: `201 {event}` · `200 {duplicate:true}` · `202 {ignored:"…"}` · `401`. **Never 500s on a malformed SMS; never echoes the body; the raw body is never stored.**
+- GET `/api/bank/sms-events?status=pending` — the review queue (structured fields only)
+- PATCH `/api/bank/sms-events/<id>` — edit a pending event's fields
+- POST `/api/bank/sms-events/<id>/confirm` — optional `{amount?, direction?, merchant?, occurred_on?, category_id?}` overrides → validates → categorises (`finance/categorize.py`, rules → "Other" fallback) → **inserts one row into the existing `transactions` table** (via `routes.transactions.insert_transaction` — the single write path) → `status='confirmed'`. The Financial Twin / forecast / goals / decision engine update automatically.
+- POST `/api/bank/sms-events/<id>/ignore` — `status='ignored'`, no transaction
+
+**Review-only:** there is no auto-confirm. Every detected event waits for the user's explicit Confirm / Edit / Ignore before any money reaches the twin. `ingestion/` is pure (stdlib + `finance.money` only — no LLM, no DB, no network); the Number Guard, Decision Engine, RAG and Herman are unchanged. Ownership is `student_id`-scoped on every row; cross-user access is a 404; an ingest token maps to exactly one connection → one user.
+
 ### Categorization rules
-- GET `/api/categorization-rules` - Global default rules + the student's own
+- GET `/api/categorization-rules` - Global default rules + your own
 - POST `/api/categorization-rules` - Create a personal rule (`match_type` contains|equals, `pattern`, `category_id`, `priority`)
 - PUT `/api/categorization-rules/<id>` - Update a personal rule (global rules are read-only)
 - DELETE `/api/categorization-rules/<id>` - Delete a personal rule
 
 ### Categories
-- GET `/api/categories/` - Global default categories + the student's own
-- POST `/api/categories/` - Add a category (scoped to the authenticated student)
+- GET `/api/categories/` - Global default categories + your own
+- POST `/api/categories/` - Add a category (scoped to your account)
 - PUT `/api/categories/<id>` - Update one of your own categories (globals are read-only)
 - DELETE `/api/categories/<id>` - Delete one of your own unused categories
 
 ### Budgets
-- GET `/api/budgets?month=<YYYY-MM>` - Budgets for the authenticated student
+- GET `/api/budgets?month=<YYYY-MM>` - Your budgets
 - POST `/api/budgets/` - Add or update a budget
 - DELETE `/api/budgets/<id>` - Delete a budget
 
 ### Dashboard
-- GET `/api/dashboard/summary` - Dashboard summary for the authenticated student
+- GET `/api/dashboard/summary` - Your dashboard summary
 
 ### Reports
 - GET `/api/reports/chart-data?category=&month=&start_date=&end_date=` - Chart data + filtered transactions
+- GET `/api/reports/financial-profile?period=<30d|3m|6m|12m|all|custom>&from=&to=&format=<json|markdown|pdf>` -
+  **Portable Financial Profile** export. A user-scoped, deterministic snapshot
+  (balance & safety buffer, income/spending patterns, budgets, recurring
+  commitments, savings goals, forecast, backend-supported insights). Built from
+  the `finance` / `decision` layers — never by an LLM. The file deliberately
+  **excludes** raw SMS, passwords, session tokens, ingest tokens and full bank
+  account numbers. Default period is the last 3 months. Intended for the user to
+  hand to *another* AI assistant; Expendicure never transmits it anywhere.
 
 ### Digital Twin
-- GET `/api/twin/state?as_of=<YYYY-MM-DD>` - Deterministic snapshot of the student's financial state (balances, month-to-date totals, spending by category, budgets, recurring items, safety buffer, committed upcoming expenses, discretionary buffer). Every value is computed by `finance.twin`, never by an LLM.
+- GET `/api/twin/state?as_of=<YYYY-MM-DD>` - Deterministic snapshot of your financial state (balances, month-to-date totals, spending by category, budgets, recurring items, safety buffer, committed upcoming expenses, discretionary buffer). Every value is computed by `finance.twin`, never by an LLM.
 
 ### Affordability
 - POST `/api/affordability/check` - Deterministic "Can I afford this?" — body `{ amount, category?, date?, horizon_days?, as_of? }`. Returns a structured verdict (`affordable` / `tight` / `not_affordable`), a 0-100 safety score, `projected_min_balance` over the horizon, `breaches`, and `reasons`. Computed by `finance.affordability`, never by an LLM.
@@ -268,7 +331,7 @@ from the token — endpoints do **not** accept a `student_id` parameter.
   `recurring_transactions`, `budgets` and `categories` are guaranteed untouched.
 
 ### Cash-flow forecast
-- GET `/api/forecast?as_of=<YYYY-MM-DD>&horizon_days=30` - Deterministic **expected** balance over the next 1–365 days (default 30). Rolls `current_balance` forward through the one shared kernel, applying every future occurrence of the student's active recurring transactions **and** recurring patterns conservatively detected from history. Returns `projected_min_balance` / `_date`, `projected_end_balance`, `projected_income` / `expenses` / `net`, an overall `confidence` (`low`/`medium`/`high`), per-occurrence `events`, `assumptions` (with confidence + observation counts), the daily `projection` series, and `safety_buffer_breached` + earliest `breach_date`. Read-only; no LLM.
+- GET `/api/forecast?as_of=<YYYY-MM-DD>&horizon_days=30` - Deterministic **expected** balance over the next 1–365 days (default 30). Rolls `current_balance` forward through the one shared kernel, applying every future occurrence of your active recurring transactions **and** recurring patterns conservatively detected from history. Returns `projected_min_balance` / `_date`, `projected_end_balance`, `projected_income` / `expenses` / `net`, an overall `confidence` (`low`/`medium`/`high`), per-occurrence `events`, `assumptions` (with confidence + observation counts), the daily `projection` series, and `safety_buffer_breached` + earliest `breach_date`. Read-only; no LLM.
 
   **Current reality vs hypothetical vs expected** — three separate concepts, all sharing `finance.projection`:
   - **Digital Twin** (`finance.twin`, `/api/twin/state`) — *what IS, as of now*.
@@ -280,7 +343,7 @@ from the token — endpoints do **not** accept a `student_id` parameter.
   **Confidence rules** (deterministic): an active user-created recurring transaction is always `high`. A detected pattern is `high` (≥ 6 obs, strict gaps, spread ≤ 0.15), `medium` (≥ 4 obs, strict gaps, spread ≤ 0.25), or `low` (≥ 3 obs, spread ≤ 0.40). Overall forecast confidence = the lowest assumption's confidence, or `low` when there are no assumptions.
 
 ### Anomaly detection
-- GET `/api/anomalies?as_of=<YYYY-MM-DD>&history_days=90` - Deterministic scan (`history_days` 7–365, default 90) of the student's transaction history for suspicious events. Returns `{as_of, history_days, anomalies[], count, high_count, medium_count, low_count}`; each anomaly has `type`, `severity` (`low`/`medium`/`high`), a concise factual `reason`, and type-specific evidence fields. Read-only; no writes; no LLM/ML.
+- GET `/api/anomalies?as_of=<YYYY-MM-DD>&history_days=90` - Deterministic scan (`history_days` 7–365, default 90) of your transaction history for suspicious events. Returns `{as_of, history_days, anomalies[], count, high_count, medium_count, low_count}`; each anomaly has `type`, `severity` (`low`/`medium`/`high`), a concise factual `reason`, and type-specific evidence fields. Read-only; no writes; no LLM/ML.
 
   The engine produces **facts, not advice** — e.g. *"Food spending was 4.00x the historical weekly average"* — never *"stop spending"* or *"you can't afford this"*. The Phase 9 agent interprets these facts alongside the twin, affordability, what-if and forecast.
 
@@ -344,7 +407,7 @@ from the token — endpoints do **not** accept a `student_id` parameter.
 
 - Tool `retrieve_financial_knowledge` — args `{ query, k? }` (k 1–5, default 3) → `{ available, mode, results: [{ title, text, source }] }`. **Read-only; never touches a financial table.**
 
-  A small **curated, version-controlled** corpus of financial *concepts* lives in `backend/knowledge/corpus/*.md` (safety buffer, discretionary spending, budgeting, recurring payments, emergency fund, student finance). No web scraping, no external APIs, no external vector DB, no LangChain/LlamaIndex.
+  A small **curated, version-controlled** corpus of financial *concepts* lives in `backend/knowledge/corpus/*.md` (safety buffer, discretionary spending, budgeting, recurring payments, emergency fund, personal finance). No web scraping, no external APIs, no external vector DB, no LangChain/LlamaIndex.
 
   - **Chunking** — deterministic markdown chunker (`chunker.py`); chunk ids are `"<source>#<index>"` so retrieval is reproducible.
   - **Embeddings** — computed **locally** via Ollama `nomic-embed-text` (`/api/embeddings`). Stored as JSON in an **isolated SQLite file** `backend/knowledge/knowledge.sqlite` (`knowledge_chunks` + `knowledge_meta` tables only — completely separate from the MySQL financial DB; `CREATE TABLE IF NOT EXISTS`, no financial migration).
@@ -461,7 +524,7 @@ same conventions as `accounts` / `recurring_transactions`.
 
 - `GET/POST /api/goals`, `GET/PUT/DELETE /api/goals/<id>` (`?archive=1` to
   archive instead of delete). **Ownership is enforced on every row** via
-  `student_id` from `token_required`; another student's goal is a 404 for
+  `student_id` from `token_required`; another account's goal is a 404 for
   everyone else and is never returned, updated or deleted. A `student_id` in
   the request body is ignored. Validation: `target_amount > 0`,
   `current_amount >= 0`, `monthly_contribution >= 0`, valid `target_date`,
@@ -625,19 +688,19 @@ same engine exposed over HTTP for the frontend; they are not the agent's path.
 After setting up the database, you can run these commands to verify the connection:
 
 ```sql
--- Check students
+-- Check accounts
 SELECT * FROM students;
 
 -- Check categories
 SELECT * FROM categories;
 
--- Check transactions for student 1
+-- Check transactions for account 1
 SELECT t.*, c.name AS category_name 
 FROM transactions t 
 JOIN categories c ON t.category_id = c.id 
 WHERE t.student_id = 1;
 
--- Check budgets for student 1 in April 2026
+-- Check budgets for account 1 in April 2026
 SELECT b.*, c.name AS category_name 
 FROM budgets b 
 JOIN categories c ON b.category_id = c.id 
@@ -722,7 +785,7 @@ expendicure/
 ## Screenshots Placeholder
 
 For academic report purposes, include screenshots of:
-1. Login/Student selection screen
+1. Login screen
 2. Dashboard with statistics and charts
 3. Transactions list
 4. Add transaction form

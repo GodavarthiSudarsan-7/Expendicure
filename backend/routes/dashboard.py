@@ -45,7 +45,7 @@ def get_dashboard_summary(current_student):
     remaining_budget = (total_budget - total_monthly_spending) if total_budget > 0 else 0.0
 
     # Real balance: opening_balance + credits - debits, from the deterministic
-    # finance repository. 0.00 when the student has no account and no income.
+    # finance repository. 0.00 when the account has no opening balance and no income.
     total_balance = float(get_repository().compute_current_balance(student_id))
 
     recent_transactions = execute_query(
