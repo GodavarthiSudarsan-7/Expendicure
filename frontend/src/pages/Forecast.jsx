@@ -30,9 +30,9 @@ export default function Forecast() {
     <>
       <div className="page-head">
         <div>
-          <div className="eyebrow">Expected future</div>
-          <h1>Cash-flow forecast</h1>
-          <div className="sub">What your balance is likely to look like if nothing changes — your current balance rolled forward through known recurring money movements.</div>
+          <div className="eyebrow">Projected — not guaranteed</div>
+          <h1>Where your balance is heading</h1>
+          <div className="sub">Your current balance rolled forward through known recurring money movements. These are projections that update as your patterns change, not a promise.</div>
         </div>
         <div className="actions">
           <PillTabs options={HORIZONS} value={horizon} onChange={setHorizon} />

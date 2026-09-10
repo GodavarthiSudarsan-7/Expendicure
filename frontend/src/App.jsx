@@ -5,6 +5,9 @@ import { ToastProvider } from './components/ui';
 import AppShell from './components/AppShell';
 
 import Dashboard from './pages/Dashboard';
+import BeforeYouSpend from './pages/BeforeYouSpend';
+import Goals from './pages/Goals';
+import Recovery from './pages/Recovery';
 import Transactions from './pages/Transactions';
 import AddTransaction from './pages/AddTransaction';
 import Budget from './pages/Budget';
@@ -35,6 +38,9 @@ function PublicOnly({ children }) {
 
 const routes = [
   ['/', Dashboard],
+  ['/before-you-spend', BeforeYouSpend],
+  ['/goals', Goals],
+  ['/recovery', Recovery],
   ['/transactions', Transactions],
   ['/transactions/add', AddTransaction],
   ['/budgets', Budget],
@@ -62,6 +68,8 @@ export default function App() {
             {/* legacy redirects */}
             <Route path="/budget" element={<Navigate to="/budgets" replace />} />
             <Route path="/reports" element={<Navigate to="/forecast" replace />} />
+            <Route path="/dashboard" element={<Navigate to="/" replace />} />
+            <Route path="/decide" element={<Navigate to="/before-you-spend" replace />} />
             <Route path="*" element={<Navigate to="/" replace />} />
           </Routes>
         </Router>

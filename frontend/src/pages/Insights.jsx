@@ -68,9 +68,9 @@ export default function Insights() {
       <div className="page-head">
         <div>
           <div className="eyebrow">Financial signals</div>
-          <h1>Insights</h1>
+          <h1>What looks unusual</h1>
           <div className="sub">
-            Deterministic findings from your own history — facts, not advice. Expendicure never invents a financial conclusion.
+            Deterministic findings from your own history — facts, not advice, with a clear severity. Expendicure never invents a financial conclusion.
           </div>
         </div>
       </div>

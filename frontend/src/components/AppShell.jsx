@@ -6,16 +6,20 @@ import AiStatus from './AiStatus';
 
 const NAV = [
   { section: 'Overview' },
-  { to: '/', label: 'Dashboard', icon: '◧', end: true },
+  { to: '/', label: 'Overview', icon: '◧', end: true },
+  { to: '/before-you-spend', label: 'Before You Spend', icon: '◎', spotlight: true },
   { to: '/transactions', label: 'Transactions', icon: '⇄' },
-  { to: '/budgets', label: 'Budgets', icon: '◑' },
-  { to: '/recurring', label: 'Commitments', icon: '↻' },
-  { section: 'Intelligence' },
   { to: '/forecast', label: 'Forecast', icon: '📈' },
-  { to: '/affordability', label: 'Can I Afford?', icon: '✓' },
-  { to: '/what-if', label: 'What-If', icon: '⑂' },
   { to: '/insights', label: 'Insights', icon: '⚡' },
   { to: '/ask', label: 'Ask Herman', icon: '✦' },
+  { section: 'Plan' },
+  { to: '/goals', label: 'Goals', icon: '🎯' },
+  { to: '/recovery', label: 'Recovery', icon: '🛟' },
+  { to: '/budgets', label: 'Budgets', icon: '◑' },
+  { to: '/recurring', label: 'Commitments', icon: '↻' },
+  { section: 'Tools' },
+  { to: '/affordability', label: 'Can I Afford?', icon: '✓' },
+  { to: '/what-if', label: 'What-If', icon: '⑂' },
   { section: 'Manage' },
   { to: '/categories', label: 'Categories', icon: '#' },
   { to: '/settings', label: 'Settings', icon: '⚙' },
@@ -50,7 +54,8 @@ export default function AppShell({ children }) {
                 to={item.to}
                 end={item.end}
                 onClick={closeMobile}
-                className={({ isActive }) => `nav-link ${isActive ? 'active' : ''}`}
+                className={({ isActive }) =>
+                  `nav-link ${item.spotlight ? 'spotlight' : ''} ${isActive ? 'active' : ''}`}
               >
                 <span className="ico" aria-hidden>{item.icon}</span>
                 <span>{item.label}</span>
@@ -72,8 +77,8 @@ export default function AppShell({ children }) {
           <div className="topbar-search" onClick={() => navigate('/ask')}>
             <span aria-hidden>🔍</span>
             <input
-              placeholder="Ask Expendicure…"
-              aria-label="Ask Expendicure"
+              placeholder="Ask Herman about a purchase…"
+              aria-label="Ask Herman"
               readOnly
               onFocus={() => navigate('/ask')}
             />

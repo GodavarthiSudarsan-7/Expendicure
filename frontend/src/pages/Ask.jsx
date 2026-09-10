@@ -4,14 +4,16 @@ import { agentApi, apiError } from '../api';
 import { useAiHealth } from '../hooks/useAiHealth';
 import { Card, CardBody, Button, Textarea, Chip, Badge, Alert } from '../components/ui';
 import DecisionCard from '../components/DecisionCard';
-import { initials } from '../lib/format';
+import RecoveryCard from '../components/decision/RecoveryCard';
+import { money, dateShort } from '../lib/format';
+import { goalStatusMeta } from '../lib/presentation';
 
 const SUGGESTED = [
-  'Can I spend ₹3,500 on headphones?',
-  'What will my balance look like at the end of the month?',
-  'What if I spend ₹2,000 instead?',
-  'Anything unusual this month?',
-  'How am I doing overall?',
+  'Can I buy headphones for ₹4,999?',
+  'How is my laptop goal doing?',
+  'I already spent ₹5,000 — how do I recover?',
+  "What if it's ₹3,000 instead?",
+  "What's my forecast for the next 30 days?",
 ];
 
 const TOOL_ACTIVITY = {
@@ -57,6 +59,7 @@ export default function Ask() {
         data: res.data || null,
         actions: res.suggested_actions || [],
         offline: res.ai && res.ai.available === false,
+        guardFallback: !!(res.ai && res.ai.guard && res.ai.guard.fallback_used),
       }]);
     } catch (e) {
       setMessages((m) => [...m, {
@@ -128,12 +131,48 @@ export default function Ask() {
                         <Badge tone="warn" className="mb-2">Local AI offline</Badge>
                       )}
                       <div className="soft" style={{ whiteSpace: 'pre-wrap', lineHeight: 1.6 }}>{m.text}</div>
+                      {m.role === 'herman' && m.guardFallback && (
+                        <div className="subtle-note mt-2">Showing Expendicure's verified result.</div>
+                      )}
                       {m.role === 'herman' && m.tool_used === 'evaluate_financial_decision' && m.data && (
-                        <DecisionCard data={m.data} onAsk={(q) => send(q)} />
+                        <DecisionCard data={m.data} onAsk={(q) => send(q)} busy={busy} />
+                      )}
+                      {m.role === 'herman' && m.tool_used === 'evaluate_recovery_plan' && m.data && (
+                        <Card className="mt-4"><CardBody>
+                          <RecoveryCard data={m.data} compact />
+                        </CardBody></Card>
+                      )}
+                      {m.role === 'herman' && m.tool_used === 'get_savings_goals' && Array.isArray(m.data?.goals) && (
+                        <div className="grid grid-2 mt-4" style={{ gap: 12 }}>
+                          {m.data.goals.map((g, gi) => {
+                            const st = goalStatusMeta(g.status);
+                            return (
+                              <div key={gi} className="goal-card">
+                                <div className="gc-top">
+                                  <div><div className="gc-name">{g.name}</div>
+                                    <div className="gc-nums"><span className="gc-cur tabular">{money(g.current_amount)}</span>
+                                      <span className="gc-tgt">of {money(g.target_amount)}</span></div>
+                                  </div>
+                                  <span className={`badge badge-${st.tone}`}>{st.label}</span>
+                                </div>
+                                <div className="progress"><span style={{ width: `${Math.max(0, Math.min(100, parseFloat(g.percent_complete) || 0))}%` }} /></div>
+                                <div className="gc-foot">
+                                  <span>{g.percent_complete}% · {money(g.remaining_amount)} to go</span>
+                                  <span>by {dateShort(g.target_date)}</span>
+                                </div>
+                              </div>
+                            );
+                          })}
+                        </div>
                       )}
                       {m.role === 'herman' && Array.isArray(m.data?.knowledge_used) && m.data.knowledge_used.length > 0 && (
-                        <div className="muted mt-2" style={{ fontSize: '0.76rem' }}>
-                          Concept context: {m.data.knowledge_used.map((k) => k.title).join(' · ')}
+                        <div className="alert alert-info mt-2" style={{ alignItems: 'flex-start', marginBottom: 0 }}>
+                          <span aria-hidden>💡</span>
+                          <div><strong>Why this matters</strong>
+                            <div className="subtle-note" style={{ marginTop: 3 }}>
+                              {m.data.knowledge_used.map((k) => k.title).join(' · ')} · Expendicure Financial Knowledge
+                            </div>
+                          </div>
                         </div>
                       )}
                       {m.role === 'herman' && (m.actions || []).length > 0 && (

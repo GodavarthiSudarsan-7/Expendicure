@@ -9,16 +9,45 @@ The goal-progress / goal-impact / recovery engines only READ these rows; the
 agent never writes here.
 """
 
+from datetime import date
 from decimal import Decimal, InvalidOperation
 
 from flask import Blueprint, jsonify, request
 
 from database import execute_query
 from date_filters import parse_iso_date
-from finance.models import GOAL_STATUSES, GOAL_ACTIVE, GOAL_ARCHIVED
+from decision.goal_progress import compute_goal_progress
+from finance.models import GOAL_STATUSES, GOAL_ACTIVE, GOAL_ARCHIVED, SavingsGoal
+from finance.money import money as _to_money
 from middleware import token_required
 
 goals_bp = Blueprint("goals", __name__)
+
+
+def _coerce_date(value):
+    if isinstance(value, date):
+        return value
+    return date.fromisoformat(str(value))
+
+
+def _with_progress(row, *, as_of=None):
+    """Attach a deterministic ``progress`` object (from decision.goal_progress)
+    to a goal row dict. Read-only, additive — existing consumers ignore it."""
+    if not row:
+        return row
+    try:
+        goal = SavingsGoal(
+            id=row["id"], student_id=row["student_id"], name=row["name"],
+            target_amount=_to_money(row["target_amount"]),
+            current_amount=_to_money(row["current_amount"]),
+            monthly_contribution=_to_money(row["monthly_contribution"]),
+            target_date=_coerce_date(row["target_date"]),
+            status=row.get("status") or GOAL_ACTIVE,
+        )
+        row["progress"] = compute_goal_progress(goal, as_of=as_of or date.today()).to_dict()
+    except (KeyError, ValueError, TypeError, InvalidOperation):
+        row["progress"] = {"available": False, "reason": "progress could not be computed", "status": "unknown"}
+    return row
 
 GOAL_SELECT = (
     "SELECT id, student_id, name, target_amount, current_amount, "
@@ -116,7 +145,8 @@ def list_goals(current_student):
     rows = execute_query(sql, tuple(params), fetch_all=True)
     if rows is None:
         return jsonify({"error": "Failed to fetch goals"}), 500
-    return jsonify(rows)
+    today = date.today()
+    return jsonify([_with_progress(r, as_of=today) for r in rows])
 
 
 @goals_bp.route("/<int:goal_id>", methods=["GET"])
@@ -124,7 +154,7 @@ def list_goals(current_student):
 def get_goal(current_student, goal_id):
     if _owned(current_student["id"], goal_id) is None:
         return jsonify({"error": "Goal not found or unauthorized"}), 404
-    return jsonify(execute_query(GOAL_SELECT, (goal_id,), fetch_one=True))
+    return jsonify(_with_progress(execute_query(GOAL_SELECT, (goal_id,), fetch_one=True)))
 
 
 @goals_bp.route("", methods=["POST"], strict_slashes=False)
@@ -151,7 +181,7 @@ def create_goal(current_student):
     )
     if new_id is None:
         return jsonify({"error": "Failed to create goal"}), 500
-    return jsonify(execute_query(GOAL_SELECT, (new_id,), fetch_one=True)), 201
+    return jsonify(_with_progress(execute_query(GOAL_SELECT, (new_id,), fetch_one=True))), 201
 
 
 @goals_bp.route("/<int:goal_id>", methods=["PUT"])
@@ -192,7 +222,7 @@ def update_goal(current_student, goal_id):
     )
     if result is None:
         return jsonify({"error": "Failed to update goal"}), 500
-    return jsonify(execute_query(GOAL_SELECT, (goal_id,), fetch_one=True))
+    return jsonify(_with_progress(execute_query(GOAL_SELECT, (goal_id,), fetch_one=True)))
 
 
 @goals_bp.route("/<int:goal_id>", methods=["DELETE"])
@@ -209,8 +239,8 @@ def delete_goal(current_student, goal_id):
         )
         if result is None:
             return jsonify({"error": "Failed to archive goal"}), 500
-        return jsonify({"message": "Goal archived", "goal": execute_query(
-            GOAL_SELECT, (goal_id,), fetch_one=True)}), 200
+        return jsonify({"message": "Goal archived", "goal": _with_progress(
+            execute_query(GOAL_SELECT, (goal_id,), fetch_one=True))}), 200
 
     result = execute_query(
         "DELETE FROM savings_goals WHERE id = %s", (goal_id,), commit=True

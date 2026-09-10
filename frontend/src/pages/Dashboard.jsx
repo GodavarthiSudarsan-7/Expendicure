@@ -38,45 +38,47 @@ export default function Dashboard() {
       <div className="page-head">
         <div>
           <div className="eyebrow">{greeting()}, {user?.name?.split(' ')[0] || 'there'}</div>
-          <h1>Here's your financial snapshot</h1>
+          <h1>How financially safe am I right now?</h1>
           <div className="sub">Every figure below comes straight from Expendicure's deterministic financial engine.</div>
         </div>
-        <div className="actions">
-          <Link to="/affordability" className="btn btn-secondary">Can I afford something?</Link>
-          <Link to="/what-if" className="btn btn-primary">Run a what-if</Link>
+      </div>
+
+      <div className="hero-band mb-6">
+        <div>
+          <div className="hb-title">Don't just ask if you can afford it. Ask what it will cost your future.</div>
+          <div className="hb-sub">Expendicure simulates the financial consequence of a spending decision before you make it.</div>
+        </div>
+        <div className="hb-actions">
+          <Link to="/before-you-spend" className="btn btn-primary btn-lg">Simulate a purchase</Link>
+          <Link to="/ask" className="btn btn-secondary btn-lg">Ask Herman</Link>
         </div>
       </div>
 
       {twin.error && <ErrorState message={twin.error} onRetry={twin.reload} />}
 
       {twin.loading ? (
-        <SkeletonCards count={4} />
+        <SkeletonCards count={3} />
       ) : t ? (
-        <div className="grid grid-4">
+        <div className="grid grid-3">
           <StatCard
-            label="Current balance" tone="brand"
+            label="Available balance" tone="brand"
             value={money(t.current_balance)}
             meta={<>Opening {money(t.opening_balance)} · net {signedMoney(Math.abs(parseFloat(t.month_net)), parseFloat(t.month_net) >= 0 ? 'credit' : 'debit')} this month</>}
           />
           <StatCard
-            label="Discretionary buffer"
+            label="Safe to spend"
             tone={parseFloat(t.discretionary_buffer) > 0 ? 'ok' : 'warn'}
             value={money(t.discretionary_buffer)}
             meta={<>After {money(t.committed_upcoming)} committed & {money(t.safety_buffer)} safety buffer</>}
           />
           <StatCard
-            label="Next commitment" tone="neutral"
-            value={nextCommitment ? money(nextCommitment.amount) : '—'}
-            meta={nextCommitment ? <>{nextCommitment.label} · {dateShort(nextCommitment.next_date)}</> : 'No upcoming commitments'}
-          />
-          <StatCard
-            label="30-day outlook"
+            label="Projected month-end"
             tone={health.tone}
-            value={forecast.loading ? '…' : (f?.safety_buffer_breached ? 'Watch' : 'Healthy')}
+            value={forecast.loading ? '…' : money(f?.projected_end_balance)}
             meta={forecast.loading ? 'Forecasting…' : (
               f?.safety_buffer_breached
                 ? <>Buffer reached {dateShort(f.breach_date)}</>
-                : <>Low point {money(f?.projected_min_balance)}</>
+                : <>Low point {money(f?.projected_min_balance)} · confidence {f?.confidence}</>
             )}
           />
         </div>
