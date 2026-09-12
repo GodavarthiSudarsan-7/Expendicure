@@ -79,6 +79,14 @@
 
                 <TextView android:layout_width="wrap_content" android:layout_height="wrap_content"
                     android:layout_marginTop="8dp"
+                    android:text="@string/label_url" android:textColor="@color/muted" android:textSize="12sp" />
+                <TextView android:id="@+id/configuredUrl"
+                    android:layout_width="match_parent" android:layout_height="wrap_content"
+                    android:text="—" android:textColor="@color/ink" android:textSize="14sp"
+                    android:textIsSelectable="true" />
+
+                <TextView android:layout_width="wrap_content" android:layout_height="wrap_content"
+                    android:layout_marginTop="8dp"
                     android:text="@string/label_last_sync" android:textColor="@color/muted" android:textSize="12sp" />
                 <TextView android:id="@+id/lastSync"
                     android:layout_width="wrap_content" android:layout_height="wrap_content"
@@ -193,6 +201,14 @@
                 android:layout_width="match_parent" android:layout_height="wrap_content"
                 android:inputType="textPassword|textNoSuggestions" android:maxLines="1" />
         </com.google.android.material.textfield.TextInputLayout>
+
+        <TextView android:id="@+id/unsavedWarning"
+            android:layout_width="match_parent" android:layout_height="wrap_content"
+            android:layout_marginTop="10dp"
+            android:background="#FFFBEB" android:padding="10dp"
+            android:text="@string/unsaved_warning"
+            android:textColor="#B45309" android:textSize="12sp"
+            android:visibility="gone" />
 
         <LinearLayout
             android:layout_width="match_parent" android:layout_height="wrap_content"

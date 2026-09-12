@@ -85,7 +85,17 @@ object SmsTransactionParser {
     // ------------------------------------------------------------------ direction
     private val DEBIT_RE = Regex(
         "\\b(debited|debit|spent|withdrawn|withdrawal|paid|payment of|purchase of|" +
-            "purchased|sent|transferred to|txn of|dr|deducted)\\b",
+            "purchased|sent|transferred to|transferred from|txn of|dr|deducted)\\b",
+        RegexOption.IGNORE_CASE
+    )
+
+    /**
+     * A balance statement, not a transaction: "Balance is Rs.X", "Bal: Rs.X".
+     * Deliberately requires "is" or ":" straight after the word, so the trailing
+     * "Avl Bal Rs.X" on a REAL debit/credit alert is not caught by this.
+     */
+    private val BALANCE_ONLY_RE = Regex(
+        "\\b(?:available\\s+balance|avl\\.?\\s*balance|balance|bal)\\b\\s*(?:is\\b|:)",
         RegexOption.IGNORE_CASE
     )
     private val CREDIT_RE = Regex(
@@ -95,8 +105,12 @@ object SmsTransactionParser {
     )
 
     // --------------------------------------------------------------------- amount
+    // The currency token may be followed by '.', ':' or '-' before the digits.
+    // Union Bank writes "Rs:100.00"; others write "Rs.100.00" or "Rs 100.00".
+    // `\brs\b` keeps this anchored to the word "Rs" (so "24 hrs" never matches).
     private val AMOUNT = Regex(
-        "(?:inr|rs\\.?|₹)\\s*([0-9][0-9,]*(?:\\.[0-9]{1,2})?)(?:\\s*(k|lakh|lac|crore|cr)\\b)?",
+        "(?:\\binr\\b|\\brs\\b|₹)\\s*[.:\\-]?\\s*" +
+            "([0-9][0-9,]*(?:\\.[0-9]{1,2})?)(?:\\s*(k|lakh|lac|crore|cr)\\b)?",
         RegexOption.IGNORE_CASE
     )
     private val SCALE = mapOf(
@@ -123,7 +137,9 @@ object SmsTransactionParser {
     private val MERCHANT = Regex(
         "\\b(?:at|to|towards|via vpa|vpa|@)\\s+" +
             "([A-Za-z0-9][A-Za-z0-9 &._@'\\-]{1,60}?)" +
-            "(?=\\s+(?:on|ref|upi|txn|avl|bal|a/?c|dated|not you|call|if not|info)\\b|[.,;\\n]|\$)",
+            // also stop at an opening bracket — "credited to payee@bank (UPI Ref no ...)"
+            "(?=\\s+(?:on|ref|upi|txn|avl|bal|a/?c|dated|not you|call|if not|info)\\b" +
+            "|\\s*\\(|[.,;\\n]|\$)",
         RegexOption.IGNORE_CASE
     )
     private val MERCHANT_STRIP = Regex("\\b(on|ref|upi|txn|dated|avl bal|a/?c)\\b.*\$", RegexOption.IGNORE_CASE)
@@ -143,6 +159,18 @@ object SmsTransactionParser {
 
     // ----------------------------------------------------------------- templates
     private val TEMPLATES = listOf(
+        // Union Bank first: its signature footer makes these unambiguous, and
+        // the looser generic templates below would otherwise claim them.
+        // Debit is checked before credit because a UPI debit alert reads
+        // "... Debited ... and credited to <payee>".
+        "union_debit_v1" to Regex(
+            "\\bdebited\\b[\\s\\S]*\\bunion bank\\b|\\bunion bank\\b[\\s\\S]*\\bdebited\\b",
+            RegexOption.IGNORE_CASE
+        ),
+        "union_credit_v1" to Regex(
+            "\\bcredited\\b[\\s\\S]*\\bunion bank\\b|\\bunion bank\\b[\\s\\S]*\\bcredited\\b",
+            RegexOption.IGNORE_CASE
+        ),
         "hdfc_debit_v1" to Regex(
             "(?:rs\\.?|inr)\\s*[\\d,]+(?:\\.\\d{1,2})?\\s+debited\\s+from\\s+a/?c\\s*x*\\d{3,6}[\\s\\S]*?\\bto\\b",
             RegexOption.IGNORE_CASE
@@ -181,6 +209,11 @@ object SmsTransactionParser {
         val amount = amountOf(text)
         if (direction == null && amount == null) {
             return ParsedTxn(STATUS_REJECTED, "not a transaction message")
+        }
+        // A balance enquiry carries an amount but no completed debit/credit.
+        // Without this it would become a bogus "money in or out?" review item.
+        if (direction == null && !completed && BALANCE_ONLY_RE.containsMatchIn(text)) {
+            return ParsedTxn(STATUS_REJECTED, "balance information only, not a transaction")
         }
         if (amount == null) return ParsedTxn(STATUS_REJECTED, "no amount found in the message")
 

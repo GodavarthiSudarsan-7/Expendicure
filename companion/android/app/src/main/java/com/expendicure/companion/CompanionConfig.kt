@@ -39,6 +39,32 @@ class CompanionConfig private constructor(private val prefs: SharedPreferences) 
             return CompanionConfig(prefs)
         }
 
+        /**
+         * The single canonical form of a backend URL. Used by BOTH the
+         * persisted setter and the UI's "unsaved changes" check, so a typed
+         * value and a saved value can never differ by punctuation alone.
+         */
+        fun normaliseUrl(raw: String?): String =
+            raw?.trim()?.trimEnd('/').orEmpty()
+
+        /**
+         * True when the form currently on screen does not match what is
+         * PERSISTED. This matters because the SMS receiver runs from the
+         * persisted config only: an edit that was typed but never saved is
+         * invisible to real SMS forwarding.
+         *
+         * Pure — no Android APIs — so it is unit-testable.
+         */
+        fun hasUnsavedChanges(
+            typedUrl: String?, savedUrl: String?,
+            typedSender: String?, savedSender: String?,
+            tokenEdited: Boolean,
+        ): Boolean {
+            if (normaliseUrl(typedUrl) != normaliseUrl(savedUrl)) return true
+            if (typedSender?.trim().orEmpty() != savedSender?.trim().orEmpty()) return true
+            return tokenEdited
+        }
+
         /** true only if the URL is https, or an http URL on a private/LAN host
          *  (explicit dev opt-in). Anything else is rejected. */
         fun isAcceptableUrl(raw: String?): Boolean {
@@ -59,7 +85,7 @@ class CompanionConfig private constructor(private val prefs: SharedPreferences) 
 
     var backendUrl: String
         get() = prefs.getString("backend_url", "").orEmpty()
-        set(v) = prefs.edit().putString("backend_url", v.trim().trimEnd('/')).apply()
+        set(v) = prefs.edit().putString("backend_url", normaliseUrl(v)).apply()
 
     var senderId: String
         get() = prefs.getString("sender_id", "").orEmpty()

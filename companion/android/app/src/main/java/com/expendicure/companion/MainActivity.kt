@@ -49,6 +49,17 @@ class MainActivity : AppCompatActivity() {
         }
         b.resetDiagButton.setOnClickListener { cfg.resetDiagnostics(); render() }
 
+        // Keep the "unsaved changes" warning live: an unsaved server address is
+        // exactly what made Test Connection disagree with real SMS forwarding.
+        val watcher = object : android.text.TextWatcher {
+            override fun afterTextChanged(s: android.text.Editable?) = renderUnsaved()
+            override fun beforeTextChanged(s: CharSequence?, st: Int, c: Int, a: Int) {}
+            override fun onTextChanged(s: CharSequence?, st: Int, b4: Int, c: Int) {}
+        }
+        b.urlInput.addTextChangedListener(watcher)
+        b.senderInput.addTextChangedListener(watcher)
+        b.tokenInput.addTextChangedListener(watcher)
+
         loadForm()
         render()
     }
@@ -92,32 +103,56 @@ class MainActivity : AppCompatActivity() {
         return FormValues(url, sender, bank, token)
     }
 
-    private fun onSave() {
-        val v = readForm() ?: return
+    /** Commit a validated form to the persisted config. Single write path. */
+    private fun persist(v: FormValues) {
         cfg.backendUrl = v.url
         cfg.senderId = v.sender
         cfg.bankName = v.bank
         cfg.ingestToken = v.token
+    }
+
+    private fun onSave() {
+        val v = readForm() ?: return
+        persist(v)
         b.statusText.text = getString(R.string.saved)
         loadForm()
         render()
     }
 
+    /**
+     * Test Connection MUST exercise the same configuration the SMS receiver
+     * uses, which is the PERSISTED one.
+     *
+     * This previously tested whatever was typed in the form, so an
+     * edited-but-unsaved server address reported "Connected" while every real
+     * bank SMS was still being posted to the OLD saved address. We therefore
+     * commit the form first, then test strictly from `cfg`.
+     */
     private fun onTest() {
         val v = readForm() ?: return
+        persist(v)          // what we test is exactly what SmsReceiver will use
+        loadForm()
+
+        val url = cfg.backendUrl
+        val token = cfg.ingestToken
+        val sender = cfg.senderId
+
         b.testButton.isEnabled = false
         b.statusText.text = getString(R.string.testing)
+        render()
         lifecycleScope.launch {
             // A sentinel body: a real bank-connection + valid token returns
             // 202 {ignored:"not a transaction message"}; a bad token -> 401;
             // a wrong sender -> 202 {ignored:"sender is not a configured..."}.
-            val payload = EventPayload.build(v.sender, "expendicure companion connectivity check", System.currentTimeMillis())
+            // It carries no amount, so it can never create an event.
+            val payload = EventPayload.build(sender, "expendicure companion connectivity check", System.currentTimeMillis())
             val result = withContext(Dispatchers.IO) {
-                BackendClient.postSmsEvent(v.url, v.token, payload)
+                BackendClient.postSmsEvent(url, token, payload)
             }
             b.testButton.isEnabled = true
             b.statusText.text = when (result) {
                 is ForwardResult.Unauthorized -> getString(R.string.test_bad_token)
+                is ForwardResult.Timeout -> getString(R.string.test_timeout)
                 is ForwardResult.Unreachable -> getString(R.string.test_unreachable)
                 is ForwardResult.Ignored ->
                     if (result.reason.contains("not a configured", true) || result.reason.contains("does not match", true))
@@ -127,6 +162,9 @@ class MainActivity : AppCompatActivity() {
                 is ForwardResult.ServerError -> getString(R.string.test_server_error)
                 is ForwardResult.Rejected -> getString(R.string.test_rejected)
             }
+            cfg.lastStatus = result.safeLog
+            cfg.note("Connection test — " + result.safeLog)
+            render()
         }
     }
 
@@ -145,6 +183,9 @@ class MainActivity : AppCompatActivity() {
         }
         b.configuredBank.text = if (cfg.bankName.isNotEmpty()) cfg.bankName else "—"
         b.configuredSender.text = if (cfg.senderId.isNotEmpty()) cfg.senderId else "—"
+        // The SAVED server address — the one real SMS forwarding actually uses.
+        // It is the user's own setting, not a secret, and it is never logged.
+        b.configuredUrl.text = if (cfg.backendUrl.isNotEmpty()) cfg.backendUrl else "—"
         b.lastSync.text = if (cfg.lastSyncAtMillis == 0L) "—" else
             DateUtils.getRelativeTimeSpanString(cfg.lastSyncAtMillis).toString() +
                 (if (cfg.lastStatus.isNotEmpty()) "  ·  ${cfg.lastStatus}" else "")
@@ -165,6 +206,23 @@ class MainActivity : AppCompatActivity() {
         b.diagCounters.text = getString(
             R.string.diag_counters, cfg.smsSeen, cfg.senderMatched, cfg.parsedOk, cfg.forwarded
         )
+        renderUnsaved()
+    }
+
+    /**
+     * Warn when the form differs from the persisted config. Real SMS forwarding
+     * reads ONLY the persisted config, so an unsaved edit silently does nothing.
+     */
+    private fun renderUnsaved() {
+        val typedToken = b.tokenInput.text?.toString().orEmpty()
+        val dirty = CompanionConfig.hasUnsavedChanges(
+            b.urlInput.text?.toString(), cfg.backendUrl,
+            b.senderInput.text?.toString(), cfg.senderId,
+            tokenEdited = tokenTouched && typedToken.isNotEmpty() &&
+                typedToken != getString(R.string.token_stored_placeholder),
+        )
+        b.unsavedWarning.visibility =
+            if (dirty) android.view.View.VISIBLE else android.view.View.GONE
     }
 
     private data class FormValues(val url: String, val sender: String, val bank: String, val token: String)

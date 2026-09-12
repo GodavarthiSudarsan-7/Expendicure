@@ -16,7 +16,10 @@
     <string name="perm_needed">SMS permission: not granted</string>
     <string name="label_bank">Configured bank</string>
     <string name="label_sender">Sender</string>
+    <string name="label_url">Saved server address (used for real SMS)</string>
     <string name="label_last_sync">Last sync</string>
+    <string name="unsaved_warning">You have unsaved changes. Incoming bank SMS is forwarded using the SAVED settings only — tap Test Connection or Save Configuration to apply them.</string>
+    <string name="test_timeout">Saved server address did not respond. Check the IP and port, and that this phone is on the same Wi-Fi as your PC.</string>
     <string name="grant_permission">Grant SMS permission</string>
 
     <!-- config form -->

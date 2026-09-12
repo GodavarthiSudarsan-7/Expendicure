@@ -82,4 +82,24 @@ class BackendClientResponseTest {
         // Unauthorized intentionally says "re-check the token" — no token value, just advice.
         assertFalse(ForwardResult.Unauthorized.safeLog.any { it.isDigit() })
     }
+
+    // ---- Timeout: a connect/read timeout is NOT the same as "unreachable" ----
+    // A stale/wrong saved server address produces a TCP connect timeout: the
+    // packets leave the phone but nothing answers, so the server logs nothing.
+    // It gets its own result so the UI can point at the saved address.
+
+    @Test fun timeoutIsADistinctResultFromUnreachable() {
+        val timeout: ForwardResult = ForwardResult.Timeout
+        assertFalse(timeout is ForwardResult.Unreachable)
+        assertTrue(ForwardResult.Timeout.safeLog != ForwardResult.Unreachable.safeLog)
+    }
+
+    @Test fun timeoutSafeLogIsAFixedNonSensitiveString() {
+        val log = ForwardResult.Timeout.safeLog
+        assertTrue(log.isNotBlank())
+        // no host, no port, no token, no payload
+        assertFalse(log.contains("http", ignoreCase = true))
+        assertFalse(log.contains("10."))
+        assertFalse(log.any { it.isDigit() })
+    }
 }

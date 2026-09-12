@@ -161,14 +161,27 @@ class SmsReceiver : BroadcastReceiver() {
      */
     private fun forwardAsync(cfg: CompanionConfig, payload: String, structured: Boolean) {
         val pending = goAsync()
+
+        // The receiver forwards using the PERSISTED configuration only. An edit
+        // typed into the app but never saved is invisible here — which is why
+        // Test Connection now commits the form before testing.
         val backendUrl = cfg.backendUrl
         val token = cfg.ingestToken
+
+        SafeLog.status("SMS forwarding started")
+        if (backendUrl.isBlank()) {
+            SafeLog.warn("Backend URL is not configured")
+            cfg.note("No saved server address — event not forwarded")
+            @Suppress("DEPRECATION") pending.finish()
+            return
+        }
+        SafeLog.status("Backend URL configured")
 
         CoroutineScope(Dispatchers.IO).launch {
             try {
                 val result = withTimeoutOrNull(FORWARD_TIMEOUT_MS) {
                     BackendClient.postSmsEvent(backendUrl, token, payload)
-                } ?: ForwardResult.Unreachable
+                } ?: ForwardResult.Timeout
 
                 cfg.lastStatus = result.safeLog
                 cfg.note(
