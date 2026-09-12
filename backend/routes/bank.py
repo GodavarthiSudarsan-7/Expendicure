@@ -9,6 +9,16 @@ Ignore. Confirming inserts a row into the EXISTING ``transactions`` table via
 ``routes.transactions.insert_transaction`` — there is no parallel money store.
 
 The raw SMS body is never persisted and never returned by any endpoint.
+
+``POST /api/bank/sms-events`` accepts TWO request shapes:
+
+* ``{"sender", "transaction": {...}}`` — the PREFERRED path. The companion
+  parsed the SMS on the phone and the raw text never leaves the device. We
+  trust none of it: every field is re-validated here and the review status is
+  re-derived with the same rules :func:`ingestion.parse_sms` uses, so a client
+  claiming ``"confident"`` cannot inflate our confidence.
+* ``{"sender", "body"}`` — the raw-body fallback (opt-in on the companion). The
+  backend parser runs on the text exactly as before.
 """
 
 import hashlib
@@ -26,7 +36,10 @@ from finance.models import (
     SMS_NEEDS_CONFIRMATION, SMS_NEEDS_REVIEW, SMS_CONFIRMED, SMS_IGNORED,
     SMS_PENDING_STATUSES,
 )
-from ingestion import parse_sms, fingerprint
+from ingestion import (
+    parse_sms, fingerprint, ParsedSms,
+    STATUS_NEEDS_CONFIRMATION, STATUS_NEEDS_REVIEW,
+)
 from middleware import token_required, bearer_token, student_from_token
 from routes.transactions import insert_transaction, TXN_SELECT
 
@@ -50,6 +63,26 @@ EVENT_COLS = (
 
 def _hash_token(raw: str) -> str:
     return hashlib.sha256(raw.encode("utf-8")).hexdigest()
+
+
+def _normalise_sender(raw) -> str:
+    """Canonical comparison form of a bank-SMS sender id.
+
+    ONLY case and whitespace are normalised (collapsed, trimmed, upper-cased).
+    Carrier decoration is deliberately NOT stripped here: the companion already
+    resolves the on-wire DLT header (``VM-HDFCBK``, ``AD-HDFCBK-S``) down to the
+    sender the user configured before it posts, so the backend's job is a strict
+    allowlist check — just one that casing cannot defeat.
+    """
+    return " ".join(str(raw or "").split()).upper()
+
+
+def _sender_matches(configured, incoming) -> bool:
+    """True only when ``incoming`` IS the configured sender, ignoring case and
+    surrounding whitespace. Never a substring, prefix or suffix match, so
+    ``HDFCBKX`` / ``MYHDFCBK`` / ``VM-HDFCBK`` do not match ``HDFCBK``."""
+    a = _normalise_sender(configured)
+    return bool(a) and a == _normalise_sender(incoming)
 
 
 def _mask(acc):
@@ -242,40 +275,86 @@ def _ingest_identity():
     return None, None
 
 
-@bank_bp.route("/sms-events", methods=["POST"], strict_slashes=False)
-def ingest_sms_event():
-    student_id, token_conn_id = _ingest_identity()
-    if student_id is None:
-        return jsonify({"error": "authentication required"}), 401
+def _structured_from_payload(txn):
+    """Re-validate a companion-supplied structured transaction into a
+    :class:`ingestion.ParsedSms`.
 
-    data = request.get_json(silent=True) or {}
-    sender = str(data.get("sender") or "").strip()
-    body = data.get("body")
-    if not sender or not isinstance(body, str) or not body.strip():
-        return jsonify({"error": "sender and body are required"}), 400
-    if len(body) > MAX_BODY_LEN:
-        return jsonify({"ignored": "message too long to be a bank alert"}), 202
+    The companion already parsed the SMS on the phone, so the raw text is not
+    sent. We trust NOTHING here: amount / direction / date / strings are
+    re-validated and the review status is re-derived with the SAME rules
+    :func:`ingestion.parse_sms` applies, so a client that claims ``"confident"``
+    cannot make us skip review.
 
-    # --- sender verification (deterministic) ---
-    if token_conn_id is not None:
-        conn = _conn_row(student_id, token_conn_id)
-        if conn is None or not conn.get("enabled", True) or conn["sender_id"] != sender:
-            return jsonify({"ignored": "sender does not match this connection"}), 202
-    else:
-        conn = execute_query(
-            f"SELECT {CONN_COLS} FROM bank_connections "
-            "WHERE student_id = %s AND sender_id = %s AND enabled = TRUE",
-            (student_id, sender), fetch_one=True,
+    Returns a ``ParsedSms`` on success, or ``(error_message, http_status)`` on a
+    hard validation failure.
+    """
+    if not isinstance(txn, dict):
+        return "transaction must be an object", 400
+
+    amount, err = _amount_ok(txn.get("amount"))
+    if err or amount is None:
+        return "transaction.amount must be a positive number", 400
+
+    direction = str(txn.get("direction") or "").strip().lower() or None
+    if direction is not None and direction not in DIRECTIONS:
+        direction = None
+
+    merchant = (str(txn.get("merchant") or "").strip() or None)
+    if merchant:
+        merchant = merchant[:120]
+
+    masked_account = _mask(txn.get("masked_account"))
+
+    # the companion calls this field "bank_ref"; accept the DB name too
+    ref = (str(txn.get("bank_ref") or txn.get("bank_ref_id") or "").strip() or None)
+    if ref:
+        ref = ref[:64]
+
+    occurred_on = None
+    if txn.get("occurred_on"):
+        try:
+            occurred_on = parse_iso_date(txn["occurred_on"])
+        except (ValueError, TypeError):
+            occurred_on = None
+
+    template_id = (str(txn.get("template_id") or "").strip() or None)
+    if template_id:
+        template_id = template_id[:40]
+
+    # --- re-derive review status (mirrors ingestion.sms_parser.parse_sms) ---
+    if direction is None:
+        return ParsedSms(
+            status=STATUS_NEEDS_REVIEW,
+            reason="couldn't tell if this was money in or out — set it on confirm",
+            amount=amount, occurred_on=occurred_on, merchant=merchant,
+            masked_account=masked_account, bank_ref_id=ref, template_id=template_id,
         )
-        if conn is None:
-            return jsonify({"ignored": "sender is not a configured, enabled bank"}), 202
 
-    # --- transaction detection + extraction (deterministic, no LLM) ---
-    parsed = parse_sms(body)
-    if parsed.rejected:
-        # nothing is stored for a message we are ignoring
-        return jsonify({"ignored": parsed.reason}), 202
+    reasons = []
+    if occurred_on is None:
+        reasons.append("date not found")
+    if not (ref or (merchant and masked_account)):
+        reasons.append("merchant / reference not clear")
 
+    if reasons:
+        return ParsedSms(
+            status=STATUS_NEEDS_REVIEW,
+            reason="; ".join(reasons) + " — check the details before confirming",
+            direction=direction, amount=amount, occurred_on=occurred_on,
+            merchant=merchant, masked_account=masked_account,
+            bank_ref_id=ref, template_id=template_id,
+        )
+    return ParsedSms(
+        status=STATUS_NEEDS_CONFIRMATION, reason="",
+        direction=direction, amount=amount, occurred_on=occurred_on,
+        merchant=merchant, masked_account=masked_account,
+        bank_ref_id=ref, template_id=template_id,
+    )
+
+
+def _record_event(student_id, conn, parsed):
+    """Fingerprint -> dedup -> insert one REVIEW-ONLY ``bank_sms_events`` row.
+    Shared by the structured and raw-body ingest paths."""
     fp = fingerprint(conn["id"], parsed)
     existing = execute_query(
         "SELECT id, status FROM bank_sms_events WHERE connection_id = %s AND fingerprint = %s",
@@ -310,6 +389,59 @@ def ingest_sms_event():
     row = execute_query(f"SELECT {EVENT_COLS} FROM bank_sms_events WHERE id = %s",
                         (new_id,), fetch_one=True)
     return jsonify({"event": _event_public(row)}), 201
+
+
+@bank_bp.route("/sms-events", methods=["POST"], strict_slashes=False)
+def ingest_sms_event():
+    student_id, token_conn_id = _ingest_identity()
+    if student_id is None:
+        return jsonify({"error": "authentication required"}), 401
+
+    data = request.get_json(silent=True) or {}
+    sender = str(data.get("sender") or "").strip()
+    txn_in = data.get("transaction")
+    body = data.get("body")
+    structured = isinstance(txn_in, dict)
+
+    if not sender:
+        return jsonify({"error": "sender is required"}), 400
+    if not structured:
+        if not isinstance(body, str) or not body.strip():
+            return jsonify({"error": "sender and body (or a structured transaction) are required"}), 400
+        if len(body) > MAX_BODY_LEN:
+            return jsonify({"ignored": "message too long to be a bank alert"}), 202
+
+    # --- sender verification (deterministic) ---
+    if token_conn_id is not None:
+        conn = _conn_row(student_id, token_conn_id)
+        if (conn is None or not conn.get("enabled", True)
+                or not _sender_matches(conn["sender_id"], sender)):
+            return jsonify({"ignored": "sender does not match this connection"}), 202
+    else:
+        # Compared in Python via _sender_matches so the outcome is identical on
+        # any MySQL collation (case-sensitive or not) and in tests.
+        rows = execute_query(
+            f"SELECT {CONN_COLS} FROM bank_connections WHERE student_id = %s ORDER BY id",
+            (student_id,), fetch_all=True,
+        ) or []
+        conn = next((r for r in rows
+                     if r.get("enabled", True)
+                     and _sender_matches(r.get("sender_id"), sender)), None)
+        if conn is None:
+            return jsonify({"ignored": "sender is not a configured, enabled bank"}), 202
+
+    # --- structured (on-device parsed) vs raw-body path ---
+    if structured:
+        parsed = _structured_from_payload(txn_in)
+        if isinstance(parsed, tuple):          # (message, http_status) — hard failure
+            return jsonify({"error": parsed[0]}), parsed[1]
+    else:
+        parsed = parse_sms(body)
+        if parsed.rejected:
+            # nothing is stored for a message we are ignoring
+            return jsonify({"ignored": parsed.reason}), 202
+
+    return _record_event(student_id, conn, parsed)
 
 
 @bank_bp.route("/sms-events", methods=["GET"], strict_slashes=False)

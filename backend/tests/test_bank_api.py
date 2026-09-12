@@ -341,6 +341,116 @@ def test_ingest_token_wrong_sender_is_ignored(client, bdb, monkeypatch):
     assert r.status_code == 202
 
 
+# ============================================================ structured ingest
+# The companion parses the SMS on the phone and posts a `transaction` object;
+# the raw body never leaves the device. The backend re-validates everything.
+
+def _structured(direction="debit", **over):
+    txn = {
+        "amount": "5000.00", "direction": direction, "merchant": "AMAZON",
+        "masked_account": "4821", "bank_ref": "402312345678",
+        "occurred_on": "2026-09-10", "template_id": "hdfc_debit_v1",
+        "parse_status": "confident",
+    }
+    txn.update(over)
+    return txn
+
+
+def test_structured_payload_creates_event_without_a_raw_body(client, auth_headers, bdb):
+    _make_connection(client, auth_headers, bdb)
+    r = client.post("/api/bank/sms-events",
+                    json={"sender": "HDFCBK", "transaction": _structured()}, headers=auth_headers)
+    assert r.status_code == 201
+    ev = r.get_json()["event"]
+    assert ev["status"] == "needs_confirmation"
+    assert ev["direction"] == "debit" and ev["amount"] == "5000.00"
+    assert ev["merchant"] == "AMAZON" and ev["occurred_on"] == "2026-09-10"
+    assert ev["bank_ref_id"] == "402312345678" and ev["template_id"] == "hdfc_debit_v1"
+    assert bdb.txns == []                       # review-only, nothing auto-inserted
+    assert bdb.conns[0]["events_detected"] == 1
+
+
+def test_structured_missing_amount_is_400(client, auth_headers, bdb):
+    _make_connection(client, auth_headers, bdb)
+    for bad in ({}, {"amount": "0"}, {"amount": "-5"}, {"amount": "abc"}):
+        r = client.post("/api/bank/sms-events",
+                        json={"sender": "HDFCBK", "transaction": bad}, headers=auth_headers)
+        assert r.status_code == 400
+    assert bdb.events == []
+
+
+def test_structured_without_direction_needs_review(client, auth_headers, bdb):
+    _make_connection(client, auth_headers, bdb)
+    txn = _structured()
+    txn.pop("direction")
+    ev = client.post("/api/bank/sms-events", json={"sender": "HDFCBK", "transaction": txn},
+                     headers=auth_headers).get_json()["event"]
+    assert ev["status"] == "needs_review" and ev["direction"] is None
+    assert ev["amount"] == "5000.00"
+
+
+def test_structured_thin_fields_stay_in_review_even_if_client_claims_confident(client, auth_headers, bdb):
+    # client sends parse_status "confident" but supplies neither a ref nor
+    # merchant+account nor a date -> the server re-derives and keeps it in review
+    _make_connection(client, auth_headers, bdb)
+    txn = _structured(parse_status="confident")
+    for k in ("bank_ref", "merchant", "masked_account", "occurred_on"):
+        txn.pop(k, None)
+    ev = client.post("/api/bank/sms-events", json={"sender": "HDFCBK", "transaction": txn},
+                     headers=auth_headers).get_json()["event"]
+    assert ev["status"] == "needs_review"
+
+
+def test_structured_bad_direction_value_falls_back_to_review(client, auth_headers, bdb):
+    _make_connection(client, auth_headers, bdb)
+    ev = client.post("/api/bank/sms-events",
+                     json={"sender": "HDFCBK", "transaction": _structured(direction="sideways")},
+                     headers=auth_headers).get_json()["event"]
+    assert ev["status"] == "needs_review" and ev["direction"] is None
+
+
+def test_structured_payload_dedupes_by_bank_ref(client, auth_headers, bdb):
+    _make_connection(client, auth_headers, bdb)
+    first = client.post("/api/bank/sms-events",
+                        json={"sender": "HDFCBK", "transaction": _structured()}, headers=auth_headers)
+    assert first.status_code == 201
+    again = client.post("/api/bank/sms-events",
+                        json={"sender": "HDFCBK", "transaction": _structured(merchant="AMZN")},
+                        headers=auth_headers)
+    assert again.status_code == 200 and again.get_json()["duplicate"] is True
+    assert len(bdb.events) == 1
+
+
+def test_structured_and_raw_of_the_same_txn_dedupe_together(client, auth_headers, bdb):
+    # raw HDFC_DEBIT and the structured form carry the same UPI ref -> one event
+    _make_connection(client, auth_headers, bdb)
+    raw = client.post("/api/bank/sms-events", json={"sender": "HDFCBK", "body": HDFC_DEBIT},
+                      headers=auth_headers)
+    assert raw.status_code == 201
+    dup = client.post("/api/bank/sms-events",
+                      json={"sender": "HDFCBK", "transaction": _structured()}, headers=auth_headers)
+    assert dup.status_code == 200 and dup.get_json()["duplicate"] is True
+    assert len(bdb.events) == 1
+
+
+def test_structured_unconfigured_sender_is_ignored(client, auth_headers, bdb):
+    _make_connection(client, auth_headers, bdb)
+    r = client.post("/api/bank/sms-events",
+                    json={"sender": "NOPE", "transaction": _structured()}, headers=auth_headers)
+    assert r.status_code == 202 and bdb.events == []
+
+
+def test_structured_event_can_be_confirmed(client, auth_headers, bdb):
+    _make_connection(client, auth_headers, bdb)
+    ev = client.post("/api/bank/sms-events",
+                     json={"sender": "HDFCBK", "transaction": _structured()},
+                     headers=auth_headers).get_json()["event"]
+    r = client.post(f"/api/bank/sms-events/{ev['id']}/confirm", json={}, headers=auth_headers)
+    assert r.status_code == 201
+    assert r.get_json()["event"]["status"] == "confirmed"
+    assert len(bdb.txns) == 1 and bdb.txns[0]["amount"] == "5000.00"
+
+
 # ============================================================ review flow
 def _detect(client, auth_headers, bdb, body=HDFC_DEBIT, sender="HDFCBK"):
     _make_connection(client, auth_headers, bdb, sender=sender)
@@ -429,3 +539,151 @@ def test_list_events_only_shows_own_and_pending_by_default(client, auth_headers,
                        "transaction_id": None, "received_at": None, "resolved_at": None})
     r = client.get("/api/bank/sms-events", headers=auth_headers).get_json()
     assert [e["id"] for e in r["events"]] == [1]
+
+
+# ==================================================== sender normalisation
+# Real-world blocker: the web app stored the sender as "hdfcbk" while the
+# Android companion posted "HDFCBK", and the exact `!=` comparison rejected
+# every real bank SMS with 202 "sender does not match". Comparison is now
+# case/whitespace-insensitive — and NOTHING more: the allowlist is unchanged.
+
+def test_sender_normalisation_helper_is_case_and_space_insensitive():
+    from routes.bank import _normalise_sender, _sender_matches
+    assert _normalise_sender("  hdfcbk ") == "HDFCBK"
+    assert _normalise_sender(None) == ""
+    assert _sender_matches("hdfcbk", "HDFCBK")
+    assert _sender_matches("HDFCBK", "  hdfcbk  ")
+    assert _sender_matches("HdFcBk", "hDfCbK")
+
+
+def test_sender_normalisation_never_broadens_the_allowlist():
+    from routes.bank import _sender_matches
+    # carrier decoration is resolved on the phone, never here
+    assert not _sender_matches("HDFCBK", "VM-HDFCBK")
+    assert not _sender_matches("HDFCBK", "AD-HDFCBK-S")
+    # no substring / prefix / suffix matching
+    assert not _sender_matches("HDFCBK", "HDFCBKX")
+    assert not _sender_matches("HDFCBK", "MYHDFCBK")
+    assert not _sender_matches("HDFCBK", "HDFC")
+    assert not _sender_matches("HDFCBK", "ICICIB")
+    # an empty configured sender can never match anything
+    assert not _sender_matches("", "HDFCBK")
+    assert not _sender_matches(None, "")
+
+
+def test_ingest_exact_sender_match_is_accepted(client, auth_headers, bdb):
+    _make_connection(client, auth_headers, bdb, sender="HDFCBK")
+    r = client.post("/api/bank/sms-events",
+                    json={"sender": "HDFCBK", "body": HDFC_DEBIT}, headers=auth_headers)
+    assert r.status_code == 201
+    assert len(bdb.events) == 1
+
+
+@pytest.mark.parametrize("configured,posted", [
+    ("hdfcbk", "HDFCBK"),   # the exact real-world failure
+    ("HDFCBK", "hdfcbk"),
+    ("HdFcBk", "hdfcbk"),
+    ("HDFCBK", "  HDFCBK  "),
+])
+def test_ingest_sender_match_is_case_insensitive(client, auth_headers, bdb, configured, posted):
+    _make_connection(client, auth_headers, bdb, sender=configured)
+    r = client.post("/api/bank/sms-events",
+                    json={"sender": posted, "body": HDFC_DEBIT}, headers=auth_headers)
+    assert r.status_code == 201, r.get_json()
+    assert len(bdb.events) == 1
+
+
+@pytest.mark.parametrize("posted", ["VM-HDFCBK", "AD-HDFCBK-S", "HDFCBKX", "MYHDFCBK", "HDFC"])
+def test_ingest_near_miss_senders_are_still_rejected(client, auth_headers, bdb, posted):
+    _make_connection(client, auth_headers, bdb, sender="hdfcbk")
+    r = client.post("/api/bank/sms-events",
+                    json={"sender": posted, "body": HDFC_DEBIT}, headers=auth_headers)
+    assert r.status_code == 202 and "ignored" in r.get_json()
+    assert bdb.events == []
+
+
+def test_ingest_unrelated_sender_is_rejected_regardless_of_case(client, auth_headers, bdb):
+    _make_connection(client, auth_headers, bdb, sender="hdfcbk")
+    for posted in ("icicib", "ICICIB", "SOMERANDOM"):
+        r = client.post("/api/bank/sms-events",
+                        json={"sender": posted, "body": HDFC_DEBIT}, headers=auth_headers)
+        assert r.status_code == 202
+    assert bdb.events == []
+
+
+def test_disabled_connection_still_ignored_with_case_difference(client, auth_headers, bdb):
+    c = _make_connection(client, auth_headers, bdb, sender="hdfcbk")
+    client.put(f"/api/bank/connections/{c['id']}", json={"enabled": False}, headers=auth_headers)
+    r = client.post("/api/bank/sms-events",
+                    json={"sender": "HDFCBK", "body": HDFC_DEBIT}, headers=auth_headers)
+    assert r.status_code == 202 and bdb.events == []
+
+
+def _token_headers(client, monkeypatch, sender):
+    """Create a connection over JWT, return its X-Ingest-Token header."""
+    from tests.conftest import FAKE_STUDENT
+    monkeypatch.setattr("middleware.execute_query", lambda *a, **k: dict(FAKE_STUDENT))
+    import jwt as pyjwt
+    from config import Config
+    jwt_hdr = {"Authorization": "Bearer " + pyjwt.encode(
+        {"student_id": 1}, Config.SECRET_KEY, algorithm="HS256")}
+    c = client.post("/api/bank/connections",
+                    json={"bank_name": "HDFC", "sender_id": sender},
+                    headers=jwt_hdr).get_json()
+    return {"X-Ingest-Token": c["ingest_token"]}
+
+
+def test_ingest_token_path_is_case_insensitive(client, bdb, monkeypatch):
+    hdr = _token_headers(client, monkeypatch, "hdfcbk")
+    r = client.post("/api/bank/sms-events",
+                    json={"sender": "HDFCBK", "body": HDFC_DEBIT}, headers=hdr)
+    assert r.status_code == 201 and r.get_json()["event"]["amount"] == "5000.00"
+
+
+def test_ingest_token_path_still_rejects_a_different_sender(client, bdb, monkeypatch):
+    hdr = _token_headers(client, monkeypatch, "hdfcbk")
+    r = client.post("/api/bank/sms-events",
+                    json={"sender": "ICICIB", "body": HDFC_DEBIT}, headers=hdr)
+    assert r.status_code == 202 and bdb.events == []
+
+
+def test_token_validation_is_unaffected_by_normalisation(client, bdb, monkeypatch):
+    _token_headers(client, monkeypatch, "hdfcbk")
+    # right sender, wrong token -> still 401, never 202/201
+    r = client.post("/api/bank/sms-events",
+                    json={"sender": "HDFCBK", "body": HDFC_DEBIT},
+                    headers={"X-Ingest-Token": "not-a-real-token"})
+    assert r.status_code == 401
+    # no credential at all -> 401
+    assert client.post("/api/bank/sms-events",
+                       json={"sender": "HDFCBK", "body": HDFC_DEBIT}).status_code == 401
+    assert bdb.events == []
+
+
+def test_structured_ingest_works_with_case_differing_sender(client, auth_headers, bdb):
+    """The companion's preferred path: on-device parse, no raw body, and the
+    sender arrives in a different case than the stored connection."""
+    _make_connection(client, auth_headers, bdb, sender="hdfcbk")
+    r = client.post("/api/bank/sms-events",
+                    json={"sender": "HDFCBK", "transaction": _structured()},
+                    headers=auth_headers)
+    assert r.status_code == 201, r.get_json()
+    ev = r.get_json()["event"]
+    assert ev["status"] == "needs_confirmation"
+    assert ev["direction"] == "debit" and ev["amount"] == "5000.00"
+    assert ev["merchant"] == "AMAZON" and ev["bank_ref_id"] == "402312345678"
+    # still review-only: no money moved
+    assert bdb.txns == []
+
+
+def test_structured_ingest_case_difference_still_dedupes(client, auth_headers, bdb):
+    _make_connection(client, auth_headers, bdb, sender="hdfcbk")
+    first = client.post("/api/bank/sms-events",
+                        json={"sender": "HDFCBK", "transaction": _structured()},
+                        headers=auth_headers)
+    again = client.post("/api/bank/sms-events",
+                        json={"sender": "hdfcbk", "transaction": _structured()},
+                        headers=auth_headers)
+    assert first.status_code == 201
+    assert again.status_code == 200 and again.get_json()["duplicate"] is True
+    assert len(bdb.events) == 1

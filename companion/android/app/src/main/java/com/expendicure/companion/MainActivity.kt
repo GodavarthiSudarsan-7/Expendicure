@@ -43,6 +43,11 @@ class MainActivity : AppCompatActivity() {
         }
         b.testButton.setOnClickListener { onTest() }
         b.saveButton.setOnClickListener { onSave() }
+        b.rawFallbackSwitch.setOnCheckedChangeListener { _, checked ->
+            cfg.rawFallbackEnabled = checked
+            render()
+        }
+        b.resetDiagButton.setOnClickListener { cfg.resetDiagnostics(); render() }
 
         loadForm()
         render()
@@ -143,6 +148,23 @@ class MainActivity : AppCompatActivity() {
         b.lastSync.text = if (cfg.lastSyncAtMillis == 0L) "—" else
             DateUtils.getRelativeTimeSpanString(cfg.lastSyncAtMillis).toString() +
                 (if (cfg.lastStatus.isNotEmpty()) "  ·  ${cfg.lastStatus}" else "")
+
+        b.rawFallbackSwitch.setOnCheckedChangeListener(null)
+        b.rawFallbackSwitch.isChecked = cfg.rawFallbackEnabled
+        b.rawFallbackSwitch.setOnCheckedChangeListener { _, checked ->
+            cfg.rawFallbackEnabled = checked
+            render()
+        }
+        b.rawFallbackNote.text = getString(
+            if (cfg.rawFallbackEnabled) R.string.raw_fallback_on else R.string.raw_fallback_off
+        )
+
+        // Safe diagnostics: fixed stage labels + counters only. No message
+        // content, no sender address, no token.
+        b.diagStage.text = if (cfg.lastStage.isEmpty()) getString(R.string.diag_none) else cfg.lastStage
+        b.diagCounters.text = getString(
+            R.string.diag_counters, cfg.smsSeen, cfg.senderMatched, cfg.parsedOk, cfg.forwarded
+        )
     }
 
     private data class FormValues(val url: String, val sender: String, val bank: String, val token: String)

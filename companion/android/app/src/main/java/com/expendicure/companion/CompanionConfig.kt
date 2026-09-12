@@ -81,6 +81,60 @@ class CompanionConfig private constructor(private val prefs: SharedPreferences) 
         get() = prefs.getLong("last_sync_at", 0L)
         set(v) = prefs.edit().putLong("last_sync_at", v).apply()
 
+    /**
+     * Opt-in "private local-network fallback". When on-device parsing cannot
+     * produce a usable transaction and this is ON, the RAW SMS body is sent to
+     * the user's own Expendicure server so the backend parser can try.
+     *
+     * Default OFF. When it is off, an unparseable bank SMS is simply dropped
+     * and nothing leaves the phone. This is NOT "the SMS never leaves your
+     * phone" when it is on — in that mode the raw text does leave the device,
+     * to the user's own local server.
+     */
+    var rawFallbackEnabled: Boolean
+        get() = prefs.getBoolean("raw_fallback", false)
+        set(v) = prefs.edit().putBoolean("raw_fallback", v).apply()
+
+    // ---------------------------------------------------------------- diagnostics
+    // Safe metadata ONLY: fixed stage labels and counters. Never an SMS body,
+    // sender address, OTP, account number, reference or token.
+
+    /** The last pipeline stage reached, as a fixed human-readable label. */
+    var lastStage: String
+        get() = prefs.getString("last_stage", "").orEmpty()
+        set(v) = prefs.edit().putString("last_stage", v).apply()
+
+    var smsSeen: Int
+        get() = prefs.getInt("c_sms_seen", 0)
+        set(v) = prefs.edit().putInt("c_sms_seen", v).apply()
+
+    var senderMatched: Int
+        get() = prefs.getInt("c_sender_matched", 0)
+        set(v) = prefs.edit().putInt("c_sender_matched", v).apply()
+
+    var parsedOk: Int
+        get() = prefs.getInt("c_parsed_ok", 0)
+        set(v) = prefs.edit().putInt("c_parsed_ok", v).apply()
+
+    var forwarded: Int
+        get() = prefs.getInt("c_forwarded", 0)
+        set(v) = prefs.edit().putInt("c_forwarded", v).apply()
+
+    /** Record a stage transition with a timestamp. Safe strings only. */
+    fun note(stage: String) {
+        lastStage = stage
+        lastSyncAtMillis = System.currentTimeMillis()
+    }
+
+    fun resetDiagnostics() {
+        prefs.edit()
+            .putInt("c_sms_seen", 0).putInt("c_sender_matched", 0)
+            .putInt("c_parsed_ok", 0).putInt("c_forwarded", 0)
+            .putString("last_stage", "").putString("last_status", "")
+            .putLong("last_sync_at", 0L)
+            .apply()
+    }
+
     val isConfigured: Boolean
         get() = backendUrl.isNotEmpty() && senderId.isNotEmpty() && ingestToken.isNotEmpty()
 

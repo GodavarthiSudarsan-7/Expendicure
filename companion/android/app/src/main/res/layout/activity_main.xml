@@ -94,6 +94,59 @@
             android:text="@string/privacy_blurb"
             android:textColor="#3730A3" android:textSize="12sp" />
 
+        <!-- ON-DEVICE PARSING + DIAGNOSTICS -->
+        <com.google.android.material.card.MaterialCardView
+            style="@style/Widget.Material3.CardView.Elevated"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginBottom="16dp"
+            app:cardCornerRadius="16dp">
+
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:orientation="vertical"
+                android:padding="18dp">
+
+                <TextView
+                    android:layout_width="wrap_content" android:layout_height="wrap_content"
+                    android:text="@string/privacy_mode_heading"
+                    android:textColor="@color/ink" android:textSize="16sp" android:textStyle="bold" />
+
+                <com.google.android.material.materialswitch.MaterialSwitch
+                    android:id="@+id/rawFallbackSwitch"
+                    android:layout_width="match_parent" android:layout_height="wrap_content"
+                    android:layout_marginTop="6dp"
+                    android:text="@string/raw_fallback_label" />
+
+                <TextView android:id="@+id/rawFallbackNote"
+                    android:layout_width="match_parent" android:layout_height="wrap_content"
+                    android:layout_marginTop="2dp"
+                    android:text="@string/raw_fallback_off"
+                    android:textColor="@color/muted" android:textSize="12sp" />
+
+                <View android:layout_width="match_parent" android:layout_height="1dp"
+                    android:layout_marginVertical="12dp" android:background="#E2E8F0" />
+
+                <TextView android:layout_width="wrap_content" android:layout_height="wrap_content"
+                    android:text="@string/diag_heading" android:textColor="@color/muted" android:textSize="12sp" />
+                <TextView android:id="@+id/diagStage"
+                    android:layout_width="match_parent" android:layout_height="wrap_content"
+                    android:text="@string/diag_none"
+                    android:textColor="@color/ink" android:textSize="14sp" />
+                <TextView android:id="@+id/diagCounters"
+                    android:layout_width="match_parent" android:layout_height="wrap_content"
+                    android:layout_marginTop="4dp"
+                    android:textColor="@color/muted" android:textSize="12sp" />
+
+                <Button android:id="@+id/resetDiagButton"
+                    style="@style/Widget.Material3.Button.TextButton"
+                    android:layout_width="wrap_content" android:layout_height="wrap_content"
+                    android:layout_marginTop="4dp"
+                    android:text="@string/diag_reset" />
+            </LinearLayout>
+        </com.google.android.material.card.MaterialCardView>
+
         <!-- CONFIG FORM -->
         <TextView
             android:layout_width="wrap_content" android:layout_height="wrap_content"
@@ -122,10 +175,13 @@
         <com.google.android.material.textfield.TextInputLayout
             android:layout_width="match_parent" android:layout_height="wrap_content"
             android:layout_marginTop="8dp" android:hint="@string/hint_sender">
+            <!-- No forced capitalisation: sender matching is case-insensitive on
+                 both the phone and the server, so what you type here can match
+                 the sender you configured in the web app either way. -->
             <com.google.android.material.textfield.TextInputEditText
                 android:id="@+id/senderInput"
                 android:layout_width="match_parent" android:layout_height="wrap_content"
-                android:inputType="textCapCharacters|textNoSuggestions" android:maxLines="1" />
+                android:inputType="textNoSuggestions" android:maxLines="1" />
         </com.google.android.material.textfield.TextInputLayout>
 
         <com.google.android.material.textfield.TextInputLayout
