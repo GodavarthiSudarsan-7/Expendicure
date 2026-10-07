@@ -128,6 +128,29 @@ def deterministic_plan(message, ctx, registry) -> Plan:
         return Plan(intent="RECOVERY", tool="evaluate_recovery_plan", arguments=args, ok=True,
                     note="deterministic")
 
+    # PAYMENT-PLAN question -> the canonical Decision Orchestrator.
+    # Placed BEFORE the consequence-engine rule but deliberately narrow: only
+    # wording that asks HOW to pay, HOW MUCH is safe, or WHEN it becomes
+    # affordable. Plain "should I buy X" still goes to the Consequence Engine,
+    # so Phase 10/13 behaviour is unchanged.
+    if amount and re.search(
+        r"\b(how much can i (safely |really )?(spend|pay|afford)|"
+        r"safe (to pay|amount)|how much is safe|"
+        r"instal?ment|instalments|installments|emi|monthly payments|"
+        r"partial payment|pay (it )?(in )?parts|split (the )?payment|pay part|"
+        r"payment plan|pay in \d+|"
+        r"when can i (afford|buy|pay|get)|earliest (date|i can)|"
+        r"what (would|do) i need to (cut|reduce|stop)|"
+        r"afford .* by (the )?\d|afford .* by (jan|feb|mar|apr|may|jun|jul|aug|sep|oct|nov|dec))\b",
+        text
+    ):
+        args = {"amount": amount}
+        desc = _merchant(message)
+        if desc:
+            args["description"] = desc
+        return Plan(intent="PAYMENT_PLAN", tool="plan_purchase_decision",
+                    arguments=args, ok=True, note="deterministic")
+
     # purchase-consequence question -> the Consequence Engine
     # (checked before GOAL_QUERY so "will buying X delay my goal" stays a DECISION)
     if amount and re.search(

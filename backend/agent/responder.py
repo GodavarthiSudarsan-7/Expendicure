@@ -25,6 +25,12 @@ _IMPACT_LINE = {
     "deepened": "you're already below your safety buffer and this makes the gap wider",
     "eased": "you'd still be below your safety buffer, but the gap gets smaller",
 }
+_STATUS_LEAD = {
+    "affordable_now": "Yes — you can pay for this today.",
+    "affordable_with_plan": "Yes, with a plan.",
+    "affordable_later": "Not today, but soon.",
+    "not_affordable": "I can't find a safe way to do this right now.",
+}
 _DECISION_LEAD = {
     "BUY": "Yes — you can buy this.",
     "WAIT": "You can afford it today, but I'd wait.",
@@ -169,6 +175,38 @@ def _fallback(plan, tool_result):
             return (head + f" Nothing fully rebuilds the buffer in time; the closest is: "
                     f"{opts[0].get('label')}.{goal_note}")
         return head + goal_note
+
+    if t == "plan_purchase_decision":
+        # Deterministic template built ONLY from authoritative fields, used when
+        # the local model is unavailable or its reply fails the Number Guard.
+        status = s.get("affordability_status")
+        lead = _STATUS_LEAD.get(status, "Here's how that purchase looks.")
+        parts = [
+            f"{lead} You can safely pay {_m(s['amount_safe_to_pay'])} today against the "
+            f"{_m(s['requested_amount'])} you asked about, keeping your projected low point "
+            f"at {_m(s['minimum_projected_balance'])} versus your "
+            f"{_m(s['minimum_balance_required'])} minimum."
+        ]
+        payments = s.get("payments") or []
+        if s.get("recommended_payment_method") and payments:
+            schedule = "; ".join(f"{_m(p['amount'])} on {p['date']}" for p in payments)
+            parts.append(f"Recommended: {str(s['recommended_payment_method']).replace('_', ' ')} "
+                         f"({schedule}).")
+        if s.get("earliest_date_for_full_payment"):
+            parts.append(f"The full amount becomes safe on "
+                         f"{s['earliest_date_for_full_payment']}.")
+        changes = s.get("spending_changes_needed") or []
+        if changes:
+            parts.append("This assumes you " + ", ".join(
+                (f"stop {c['label']}" if c["action"] == "stop"
+                 else f"reduce {c['label']} to {_m(c['to_amount'])}") for c in changes) + ".")
+        gi = s.get("goal_impact") or {}
+        if gi.get("available") and (gi.get("delay_days") or 0) > 0:
+            parts.append(f"It sets your '{gi.get('goal_name')}' goal back about "
+                         f"{gi.get('delay_days')} day(s).")
+        if not s.get("safety_check_passed"):
+            parts.append("No payment plan inside your limits completes this purchase.")
+        return " ".join(parts)
 
     if t == "check_affordability":
         lead = _VERDICT_LEAD.get(s["verdict"], "Here's how it looks.")

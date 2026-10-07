@@ -30,6 +30,7 @@ from finance.models import (
     Transaction,
     CREDIT,
     DEBIT,
+    FLEXIBILITY_ESSENTIAL,
     GOAL_ACTIVE,
 )
 from finance.money import money, to_decimal, ZERO
@@ -54,7 +55,8 @@ class FinanceRepository:
     # ------------------------------------------------------------------ account
     def get_account(self, student_id: int) -> Optional[Account]:
         row = self._query(
-            "SELECT student_id, opening_balance, safety_buffer, as_of_date "
+            "SELECT student_id, opening_balance, safety_buffer, as_of_date, "
+            "       accepts_partial_payment, accepts_installments, allows_flexible_cuts "
             "FROM accounts WHERE student_id = %s",
             (student_id,),
             one=True,
@@ -66,6 +68,10 @@ class FinanceRepository:
             opening_balance=money(row["opening_balance"]),
             safety_buffer=money(row["safety_buffer"]),
             as_of_date=_as_date(row["as_of_date"]),
+            # migration 010; .get() keeps pre-010 rows and test fakes working
+            accepts_partial_payment=_as_bool(row.get("accepts_partial_payment", True)),
+            accepts_installments=_as_bool(row.get("accepts_installments", False)),
+            allows_flexible_cuts=_as_bool(row.get("allows_flexible_cuts", True)),
         )
 
     # ------------------------------------------------------------- transactions
@@ -116,7 +122,7 @@ class FinanceRepository:
         sql = (
             "SELECT id, student_id, label, merchant_name, amount, direction, "
             "       cadence, day_of_month, weekday, next_date, source, "
-            "       confidence, active "
+            "       confidence, active, flexibility "
             "FROM recurring_transactions WHERE student_id = %s"
         )
         params = [student_id]
@@ -143,6 +149,7 @@ class FinanceRepository:
                     source=row.get("source") or "user",
                     confidence=to_decimal(confidence) if confidence is not None else None,
                     active=_as_bool(row.get("active", True)),
+                    flexibility=(row.get("flexibility") or FLEXIBILITY_ESSENTIAL),
                 )
             )
         return result

@@ -12,6 +12,7 @@ from typing import Any, Dict, List, Optional
 INTENTS = (
     "AFFORDABILITY",
     "DECISION",
+    "PAYMENT_PLAN",
     "WHAT_IF",
     "FORECAST",
     "TWIN",

@@ -26,7 +26,15 @@ PROMO_RE = re.compile(
 # --------------------------------------------------------------- direction
 DEBIT_RE = re.compile(
     r"\b(debited|debit|spent|withdrawn|withdrawal|paid|payment of|purchase of|"
-    r"purchased|sent|transferred to|txn of|dr\b|deducted)\b",
+    r"purchased|sent|transferred to|transferred from|txn of|dr\b|deducted)\b",
+    re.I,
+)
+
+# A balance statement, not a transaction: "Balance is Rs.X", "Bal: Rs.X".
+# Requires "is" or ":" straight after the word, so the trailing "Avl Bal Rs.X"
+# on a REAL debit/credit alert is not caught by this.
+BALANCE_ONLY_RE = re.compile(
+    r"\b(?:available\s+balance|avl\.?\s*balance|balance|bal)\b\s*(?:is\b|:)",
     re.I,
 )
 CREDIT_RE = re.compile(
@@ -55,8 +63,14 @@ COMPLETED_TXN_RE = re.compile(
 # INR 1,234.56 / Rs. 1234 / ₹5,00,000 / Rs 50 / Rs 5k
 # The scale word must be whitespace-separated AND word-bounded so it never eats
 # the start of the next word (e.g. "5000.00 credited" must NOT read "cr").
+# The currency token may be followed by '.', ':' or '-' before the digits.
+# Union Bank writes "Rs:100.00"; others write "Rs.100.00" or "Rs 100.00".
+# `\brs\b` keeps this anchored to the word "Rs" so "24 hrs" never matches.
+# NOTE: kept byte-for-byte in step with the on-device Android parser
+# (companion/android/.../SmsTransactionParser.kt) — the two are one contract.
 AMOUNT_RE = re.compile(
-    r"(?:inr|rs\.?|₹)\s*([0-9][0-9,]*(?:\.[0-9]{1,2})?)(?:\s*(k|lakh|lac|crore|cr)\b)?",
+    r"(?:\binr\b|\brs\b|₹)\s*[.:\-]?\s*"
+    r"([0-9][0-9,]*(?:\.[0-9]{1,2})?)(?:\s*(k|lakh|lac|crore|cr)\b)?",
     re.I,
 )
 SCALE = {"k": 1_000, "lakh": 100_000, "lac": 100_000, "cr": 10_000_000, "crore": 10_000_000}
@@ -80,7 +94,10 @@ REF_RE = re.compile(
 MERCHANT_RE = re.compile(
     r"\b(?:at|to|towards|via vpa|vpa|@)\s+"
     r"([A-Za-z0-9][A-Za-z0-9 &._@'\-]{1,60}?)"
-    r"(?=\s+(?:on|ref|upi|txn|avl|bal|a/?c|dated|not you|call|if not|info)\b|[.,;\n]|$)",
+    # also stop at an opening bracket — "credited to payee@bank (UPI Ref no ...)".
+    # Kept in step with the on-device Android parser.
+    r"(?=\s+(?:on|ref|upi|txn|avl|bal|a/?c|dated|not you|call|if not|info)\b"
+    r"|\s*\(|[.,;\n]|$)",
     re.I,
 )
 _MERCHANT_STRIP = re.compile(r"\b(on|ref|upi|txn|dated|avl bal|a/?c)\b.*$", re.I)
@@ -106,6 +123,23 @@ DATE_FORMATS = (
 # with template_id (telemetry / display only — review-only mode routes every
 # event to the user regardless). `sender_hint` is informational.
 TEMPLATES = (
+    # Union Bank first: its footer makes these unambiguous, and the looser
+    # generic templates below would otherwise claim them. Debit before credit
+    # because a UPI debit alert reads "... Debited ... and credited to <payee>".
+    {
+        "id": "union_debit_v1",
+        "sender_hint": "UNIONB",
+        "re": re.compile(
+            r"\bdebited\b.*\bunion bank\b|\bunion bank\b.*\bdebited\b",
+            re.I | re.S),
+    },
+    {
+        "id": "union_credit_v1",
+        "sender_hint": "UNIONB",
+        "re": re.compile(
+            r"\bcredited\b.*\bunion bank\b|\bunion bank\b.*\bcredited\b",
+            re.I | re.S),
+    },
     {
         "id": "hdfc_debit_v1",
         "sender_hint": "HDFCBK",

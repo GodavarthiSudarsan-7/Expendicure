@@ -60,6 +60,13 @@ class TwinState:
     committed_upcoming_horizon_days: int
     discretionary_buffer: Decimal
 
+    # --- payment preferences (migration 010) ---------------------------------
+    # Carried on the twin so the pure `decision/` layer can honour them without
+    # touching a repository. Defaults match pre-010 behaviour.
+    accepts_partial_payment: bool = True
+    accepts_installments: bool = False
+    allows_flexible_cuts: bool = True
+
 
 def _norm(name: Optional[str]) -> str:
     return (name or "").strip().casefold()
@@ -153,4 +160,7 @@ def build_twin_state(
         committed_upcoming=committed_upcoming,
         committed_upcoming_horizon_days=committed_upcoming_horizon_days,
         discretionary_buffer=discretionary_buffer,
+        accepts_partial_payment=(account.accepts_partial_payment if account else True),
+        accepts_installments=(account.accepts_installments if account else False),
+        allows_flexible_cuts=(account.allows_flexible_cuts if account else True),
     )

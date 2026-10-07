@@ -877,3 +877,78 @@ table.table { width: 100%; border-collapse: collapse; font-size: 0.88rem; }
 .report-list-no li::marker { color: var(--bad-500); }
 .report-usage { border-left: 3px solid var(--brand-400); background: var(--brand-50); padding: 12px 14px; border-radius: 0 var(--r-md) var(--r-md) 0; }
 .report-usage .ru-title { font-weight: 700; font-size: 0.8rem; text-transform: uppercase; letter-spacing: 0.05em; color: var(--brand-700); margin-bottom: 4px; }
+
+/* ============================================================================
+   Financial Decision Intelligence — the canonical decision visualisation.
+   Display only: every value rendered here is backend-computed.
+   ========================================================================== */
+.bys-layout { grid-template-columns: 400px 1fr; }
+@media (max-width: 1000px) { .bys-layout { grid-template-columns: 1fr; } }
+
+.bys-emi { margin: 4px 0 14px; }
+.bys-emi > summary {
+  cursor: pointer; font-weight: 650; font-size: 0.86rem; color: var(--brand-700);
+  padding: 8px 0;
+}
+.bys-emi[open] > summary { margin-bottom: 4px; }
+
+/* content-kind tag: FACT / RECOMMENDATION / EXPLANATION / FINANCIAL KNOWLEDGE */
+.di-kind {
+  display: inline-block; font-size: 0.62rem; font-weight: 800;
+  text-transform: uppercase; letter-spacing: 0.08em;
+  color: var(--slate-600); background: var(--slate-100);
+  border: 1px solid var(--border); border-radius: var(--r-pill);
+  padding: 2px 7px; vertical-align: middle; margin-right: 6px;
+}
+
+.di-hero {
+  border-radius: var(--r-xl); border: 1px solid var(--border);
+  padding: 26px 24px; text-align: center;
+  background: linear-gradient(180deg, var(--slate-50), #fff);
+}
+.di-hero.tone-ok   { background: linear-gradient(180deg, var(--ok-50), #fff);   border-color: #a7f3d0; }
+.di-hero.tone-warn { background: linear-gradient(180deg, var(--warn-50), #fff); border-color: #fde68a; }
+.di-hero.tone-bad  { background: linear-gradient(180deg, var(--bad-50), #fff);  border-color: #fecaca; }
+.di-eyebrow {
+  font-size: 0.72rem; font-weight: 800; text-transform: uppercase;
+  letter-spacing: 0.1em; color: var(--text-muted);
+}
+.di-requested { font-size: 0.95rem; color: var(--text-soft); margin-top: 6px; }
+.di-status { font-size: 2rem; font-weight: 850; letter-spacing: -0.035em; margin: 2px 0; }
+.di-hero.tone-ok   .di-status { color: var(--ok-700); }
+.di-hero.tone-warn .di-status { color: var(--warn-700); }
+.di-hero.tone-bad  .di-status { color: var(--bad-700); }
+.di-blurb { color: var(--text-soft); max-width: 460px; margin: 8px auto 0; font-size: 0.9rem; }
+
+.di-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 12px; margin-top: 16px; }
+@media (max-width: 760px) { .di-grid { grid-template-columns: 1fr; } }
+.di-tile {
+  border: 1px solid var(--border); border-radius: var(--r-lg);
+  background: var(--surface); box-shadow: var(--shadow-sm); padding: 16px 18px;
+}
+.di-tile-label { font-size: 0.78rem; color: var(--text-muted); margin-top: 6px; }
+.di-tile-value { font-size: 1.5rem; font-weight: 800; letter-spacing: -0.02em; }
+.di-tile-meta { font-size: 0.75rem; color: var(--text-muted); margin-top: 2px; }
+
+.di-plan-foot {
+  display: flex; flex-wrap: wrap; gap: 8px 22px; margin-top: 12px;
+  font-size: 0.85rem; color: var(--text-soft);
+}
+.di-changes { margin: 8px 0 10px; padding-left: 20px; display: flex; flex-direction: column; gap: 6px; }
+.di-changes li { font-size: 0.88rem; color: var(--text-soft); }
+
+.di-goal { display: flex; flex-wrap: wrap; align-items: baseline; gap: 10px; }
+.di-goal-name { font-weight: 750; font-size: 1.02rem; }
+.di-goal-delay { color: var(--warn-700); font-weight: 650; font-size: 0.9rem; }
+
+.di-facts {
+  display: grid; grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 2px 20px; margin-top: 10px;
+}
+@media (max-width: 700px) { .di-facts { grid-template-columns: 1fr; } }
+.di-fact {
+  display: flex; justify-content: space-between; gap: 12px;
+  padding: 6px 0; border-bottom: 1px dashed var(--border); font-size: 0.85rem;
+}
+.di-fact-label { color: var(--text-muted); }
+.di-fact-value { font-weight: 650; color: var(--text); text-align: right; }

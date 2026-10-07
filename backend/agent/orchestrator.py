@@ -93,7 +93,8 @@ class Herman:
         # --- Stage 2b: optional RAG enrichment (best-effort, never required) ---
         knowledge = None
         if (tool_result is not None and tool_result.ok
-                and plan.intent in ("DECISION", "AFFORDABILITY", "WHAT_IF", "RECOVERY")):
+                and plan.intent in ("DECISION", "AFFORDABILITY", "WHAT_IF", "RECOVERY",
+                                    "PAYMENT_PLAN")):
             knowledge = _retrieve_knowledge(message)
 
         # --- Stage 3: respond ---

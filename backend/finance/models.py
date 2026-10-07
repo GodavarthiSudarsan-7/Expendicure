@@ -40,12 +40,26 @@ SMS_EVENT_STATUSES = (
 SMS_PENDING_STATUSES = (SMS_NEEDS_CONFIRMATION, SMS_NEEDS_REVIEW)
 
 
+FLEXIBILITY_ESSENTIAL = "essential"
+FLEXIBILITY_FLEXIBLE = "flexible"
+FLEXIBILITIES = (FLEXIBILITY_ESSENTIAL, FLEXIBILITY_FLEXIBLE)
+
+
 @dataclass(frozen=True)
 class Account:
+    """``safety_buffer`` IS the user's minimum-balance-to-keep: the decision
+    engine treats it as a hard floor the projected balance may never cross.
+
+    The three preference flags gate which payment methods the deterministic
+    engine is allowed to RECOMMEND. Defaults match historical behaviour, so an
+    account row written before migration 010 behaves exactly as before."""
     student_id: int
     opening_balance: Decimal
     safety_buffer: Decimal
     as_of_date: date
+    accepts_partial_payment: bool = True
+    accepts_installments: bool = False
+    allows_flexible_cuts: bool = True
 
 
 @dataclass(frozen=True)
@@ -82,10 +96,18 @@ class RecurringTransaction:
     source: str = "user"  # "user" | "detected"
     confidence: Optional[Decimal] = None
     active: bool = True
+    # Only a 'flexible' commitment may be proposed for a reduction or a stop by
+    # the flexible-spending engine. Defaults to 'essential' so nothing becomes
+    # cuttable unless the user explicitly marks it.
+    flexibility: str = FLEXIBILITY_ESSENTIAL
 
     @property
     def signed_amount(self) -> Decimal:
         return self.amount if self.direction == CREDIT else -self.amount
+
+    @property
+    def is_flexible(self) -> bool:
+        return self.flexibility == FLEXIBILITY_FLEXIBLE and self.direction == DEBIT
 
 
 @dataclass(frozen=True)

@@ -35,6 +35,127 @@ described as "SMS never leaves your phone." The frontend loads the Inter webfont
 from Google Fonts (a CDN request); self-host it if that request is unacceptable
 for your deployment.
 
+## Architecture — how a financial decision is made
+
+Expendicure answers "can I afford this?" with a harder question: *can I make
+this decision without putting my future financial stability at risk?*
+
+```
+USER
+ |
+ v
+FRONTEND  /  ANDROID COMPANION
+ |                |
+ |                +-- SMS received -> sender allowlist -> ON-DEVICE parser
+ |                                    -> structured transaction event
+ v                                       (raw SMS never leaves the phone)
+STRUCTURED REQUEST  /  BANK EVENT
+ |
+ v
+AUTHENTICATED API              routes/ -- auth, validate, load, delegate, serialise
+ |
+ v
+FINANCIAL TWIN                 finance/twin.py -- the single source of user state
+ |
+ v
+DETERMINISTIC FINANCIAL ENGINES
+ |   finance/projection.py     the ONE balance kernel (one implementation, repo-wide)
+ |   finance/forecast.py       owns WHICH future events exist (every occurrence)
+ |   finance/affordability.py  Phase-4 verdict
+ |   decision/safety.py        90-day safety engine, amount_safe_to_pay, earliest date
+ |   decision/payment_plans.py full / partial / installments / wait, ranked
+ |   decision/flexible_spending.py  provable, capped spending adjustments
+ |   decision/goal_impact.py   savings-goal setback
+ |   decision/consequence_engine.py  BUY / WAIT / SPEND_LESS / AVOID
+ |   decision/recovery.py      Recovery Mode
+ v
+CANONICAL FINANCIAL DECISION   decision/orchestrator.py -> FinancialDecision
+ |                             the sole financial authority
+ v
+NUMBER GUARD                   agent/number_guard.py
+ |                             every amount AND date in the reply must appear in
+ |                             the authoritative result, or the reply is replaced
+ v
+LOCAL RAG                      knowledge/ -- concepts only, never figures
+ |
+ v
+LOCAL LLM / HERMAN             agent/ -> ai/ollama_client.py -> localhost:11434
+ |
+ v
+USER-FACING EXPLANATION
+```
+
+### The non-negotiable rules
+
+**The LLM does not calculate financial decisions.** Herman has no arithmetic
+path to a financial figure. He receives a finished `FinancialDecision` plus a
+set of structured explanation *facts* and phrases them.
+
+**Financial decisions are deterministic and verified.** Every figure is produced
+by pure `Decimal` modules (`finance/`, `decision/`) that import no Flask, no
+database, no network and no model — enforced by `tests/test_layering_purity.py`
+and per-module AST import tests.
+
+**RAG provides knowledge and context, not numbers.** `knowledge/` retrieves
+explanations ("why a safety buffer matters"). If the knowledge base or its local
+embedding model is unavailable, retrieval degrades to keyword matching and then
+to nothing — the financial decision is unaffected.
+
+**Herman converts verified facts into natural language.** If his wording
+introduces a number or date the engine never produced, Number Guard rejects the
+reply and a deterministic template built from the real values is shown instead.
+
+**Bank SMS is processed locally.** The Android companion matches the configured
+sender, parses the message on the device, and forwards only a structured
+transaction — `{amount, direction, merchant, masked_account, bank_ref,
+occurred_on}`. The raw text is never stored, never logged, and never sent to any
+external service. An optional raw-body fallback exists for unparseable messages;
+it is **off by default**, requires explicit opt-in, and is labelled a *private
+local-network fallback* — never "the SMS never leaves your phone".
+
+### Key concepts
+
+| Concept | Module | What it does |
+|---|---|---|
+| **Financial Twin** | `finance/twin.py` | Deterministic snapshot: balance, month-to-date activity, spending by category, budgets, recurring commitments, safety buffer, payment preferences |
+| **Projection kernel** | `finance/projection.py` | The single "roll the balance forward" implementation. Everything else injects events into it |
+| **Forecast** | `finance/forecast.py` | Owns future-event generation: every occurrence of every recurring item, plus conservatively *detected* patterns from history |
+| **90-day safety engine** | `decision/safety.py` | A plan is safe only if the projected end-of-day balance never crosses the user's minimum balance, every payment is in the horizon, the payments sum exactly to the amount, and the deadline is met |
+| **amount_safe_to_pay** | `decision/safety.py` | The largest amount payable today that still holds the floor — binary search on the safety predicate, exact to the rupee |
+| **Payment plans** | `decision/payment_plans.py` | Full, partial split, caller-supplied installments, or wait. Each proven, then ranked: fewest spending changes, lower cost, earlier completion, earlier start, fewer payments |
+| **Flexible spending** | `decision/flexible_spending.py` | At most 3 changes, only to commitments the user marked *flexible*, gentlest first, and only returned if re-simulation proves they work |
+| **Consequence Engine** | `decision/consequence_engine.py` | BUY / WAIT / SPEND_LESS / AVOID, with goal escalation. Unchanged and still authoritative for that question |
+| **Savings Goals / Recovery** | `decision/goal_*.py`, `recovery.py` | Goal progress, goal setback, and "I already spent it — how do I recover?" |
+| **Number Guard** | `agent/number_guard.py` | The financial-trust boundary around the LLM |
+| **Reports** | `backend/reports_export/` | Portable Financial Profile: JSON / Markdown / PDF, privacy-attested |
+
+### Why "current balance" is not "safe to spend"
+
+A ₹2,00,000 balance with a ₹30,000 monthly insurance premium looks like
+₹1,80,000 of headroom above a ₹20,000 minimum. Over 90 days the premium is
+charged **three times**, so the balance troughs at ₹1,10,000 and only ₹90,000 is
+actually safe. Naive balance-minus-floor arithmetic overstates it by ₹90,000.
+That is the whole reason the safety engine projects every occurrence rather than
+subtracting from today's balance.
+
+### Limitations
+
+- The flexible-spending search is greedy (largest lever first), not globally
+  optimal, and reduces in fixed 50% steps.
+- A spending change applies to every occurrence in the horizon; "pause for one
+  month" is not expressible yet.
+- Goal impact models a multi-payment plan as one lump setback at the first
+  payment date.
+- Installment offers are request-scoped input — Expendicure never invents or
+  prices financing, and does not persist offers.
+- `wait` usually ties or beats `partial` on completion date, so a partial split
+  is chosen mainly when it starts sooner; a financed option is chosen only when
+  waiting is impossible (a cheaper plan always wins).
+- Message- and image-derived evidence is not implemented; the extension point is
+  the `history` argument to `build_baseline`.
+- `frontend/src/pages/Budget.jsx` sums two display totals in React rather than
+  reading them from the backend — the only remaining frontend arithmetic.
+
 ## Features
 
 ### 1. Dashboard
@@ -302,6 +423,24 @@ from the token — endpoints do **not** accept a `student_id` parameter.
 
 ### Dashboard
 - GET `/api/dashboard/summary` - Your dashboard summary
+
+### Financial Decision Intelligence
+- POST `/api/affordability/check` — ONE endpoint, two response shapes:
+  - `mode` omitted or `"affordability"` (**default, unchanged, backward compatible**) —
+    the Phase-4 verdict from `finance.affordability.check_affordability`.
+  - `mode: "decision"` — the canonical **FinancialDecision** from
+    `decision.orchestrator.decide`: `amount_safe_to_pay`, `affordability_status`
+    (`affordable_now` / `affordable_with_plan` / `affordable_later` /
+    `not_affordable`), `recommended_payment_method`, a proven `payment_plan`,
+    `earliest_date_for_full_payment`, `spending_changes_needed`, `goal_impact`,
+    and `decision_explanation` (structured facts, never prose).
+
+    Optional inputs: `description`, `category`, `date`,
+    `desired_completion_date`, `goal_id`, `horizon_days` (1-365, default 90),
+    `minimum_balance`, and `installment_options[]` — caller-supplied offers,
+    simulated exactly as given. Expendicure never invents or prices financing.
+
+  Every figure is deterministic. No LLM participates in producing this response.
 
 ### Reports
 - GET `/api/reports/chart-data?category=&month=&start_date=&end_date=` - Chart data + filtered transactions

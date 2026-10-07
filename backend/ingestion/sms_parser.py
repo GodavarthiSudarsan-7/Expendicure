@@ -177,6 +177,10 @@ def parse_sms(body: str) -> ParsedSms:
 
     if direction is None and amount is None:
         return _reject("not a transaction message")
+    # A balance enquiry carries an amount but no completed debit/credit. Without
+    # this it would become a bogus "money in or out?" review item.
+    if direction is None and not completed and P.BALANCE_ONLY_RE.search(text):
+        return _reject("balance information only, not a transaction")
     if amount is None:
         return _reject("no amount found in the message")
     if direction is None:

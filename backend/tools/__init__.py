@@ -23,6 +23,7 @@ from tools.anomaly_tool import GetFinancialAnomaliesTool
 from tools.transaction_tool import GetTransactionsTool
 from tools.budget_tool import GetBudgetStatusTool
 from tools.decision_tool import EvaluateFinancialDecisionTool
+from tools.decision_intelligence_tool import PlanPurchaseDecisionTool
 from tools.knowledge_tool import RetrieveFinancialKnowledgeTool
 from tools.goals_tool import GetSavingsGoalsTool
 from tools.recovery_tool import EvaluateRecoveryPlanTool
@@ -47,6 +48,7 @@ def build_default_registry(repo_factory=default_repo_factory):
         GetFinancialTwinTool,
         CheckAffordabilityTool,
         EvaluateFinancialDecisionTool,
+        PlanPurchaseDecisionTool,
         SimulateExpenseTool,
         GetCashflowForecastTool,
         GetFinancialAnomaliesTool,

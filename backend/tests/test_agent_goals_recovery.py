@@ -99,7 +99,7 @@ def test_will_buying_delay_my_goal_is_a_decision():
 def test_goal_status_end_to_end():
     h, client = herman(
         plan_json("GOAL_QUERY", "get_savings_goals", {}),
-        "Your Laptop goal is 60% funded — ₹30,000 of ₹50,000, ₹20,000 to go by 2027-03-31.",
+        "Your Laptop goal is 60% funded — ₹30,000 of ₹50,000, ₹20,000 to go by 2027-06-30.",
         repo=repo_with_goal(),
     )
     r = h.process_message(1, "how is my laptop goal doing?", current_date=WHEN)
@@ -255,7 +255,7 @@ def test_fabricated_goal_number_triggers_fallback():
 def test_faithful_goal_reply_passes_untouched():
     h, _ = herman(
         plan_json("GOAL_QUERY", "get_savings_goals", {}),
-        "Your Laptop goal is 60% funded: ₹30,000 of ₹50,000, with ₹20,000 to go by 2027-03-31.",
+        "Your Laptop goal is 60% funded: ₹30,000 of ₹50,000, with ₹20,000 to go by 2027-06-30.",
         repo=repo_with_goal(),
     )
     r = h.process_message(1, "laptop goal status", current_date=WHEN)

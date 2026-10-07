@@ -19,6 +19,33 @@ export const affordabilityApi = {
   check: (payload) => post('/affordability/check', payload),
 };
 
+/* ---- Financial Decision Intelligence ----
+   The SAME endpoint as affordabilityApi.check, in `mode: 'decision'`. Returns
+   the canonical FinancialDecision: amount_safe_to_pay, a proven payment plan,
+   the earliest safe full-payment date, required spending changes, goal impact
+   and structured explanation facts.
+
+   Every figure is computed by the backend's deterministic engine. The frontend
+   renders them and never derives a financial value of its own. */
+export const decisionApi = {
+  plan: ({
+    amount, description, category, date,
+    desiredCompletionDate, goalId, installmentOptions, minimumBalance, horizonDays,
+  }) => post('/affordability/check', {
+    mode: 'decision',
+    amount,
+    ...(description ? { description } : {}),
+    ...(category ? { category } : {}),
+    ...(date ? { date } : {}),
+    ...(desiredCompletionDate ? { desired_completion_date: desiredCompletionDate } : {}),
+    ...(goalId ? { goal_id: goalId } : {}),
+    ...(installmentOptions && installmentOptions.length
+      ? { installment_options: installmentOptions } : {}),
+    ...(minimumBalance ? { minimum_balance: minimumBalance } : {}),
+    ...(horizonDays ? { horizon_days: horizonDays } : {}),
+  }),
+};
+
 /* ---- What-If simulation (Phase 5) ---- */
 export const simulationApi = {
   whatIf: (payload) => post('/simulation/what-if', payload),

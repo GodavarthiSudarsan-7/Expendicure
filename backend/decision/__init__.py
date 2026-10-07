@@ -42,6 +42,78 @@ from decision.recovery import (
 )
 from decision.alternatives import Alternative, build_alternatives
 
+# --- Financial Decision Intelligence (Phase D) --------------------------------
+# A 90-day safety engine + payment-plan evaluator layered ON TOP of the existing
+# kernel. It adds capability; it replaces nothing. `consequence_engine`'s
+# `largest_safe_amount` / `recommended_wait_days` keep their original coarse
+# behaviour for existing callers; `amount_safe_to_pay` and
+# `earliest_date_for_full_payment` are the new exact equivalents.
+from decision.safety import (
+    Baseline,
+    PlanPayment,
+    SafetyCheck,
+    SpendingChange,
+    SAFETY_HORIZON_DAYS,
+    ACTION_REDUCE,
+    ACTION_STOP,
+    FAIL_AMOUNT_INCOMPLETE,
+    FAIL_DEADLINE_MISSED,
+    FAIL_MIN_BALANCE,
+    FAIL_PAYMENT_OUTSIDE_HORIZON,
+    amount_safe_to_pay,
+    build_baseline,
+    earliest_date_for_full_payment,
+    earliest_safe_date_for,
+    evaluate_plan,
+    is_safe,
+    simulate,
+)
+from decision.flexible_spending import (
+    MAX_CHANGES,
+    find_adjustments,
+    flexible_candidates,
+    total_monthly_saving,
+)
+from decision.orchestrator import (
+    CURRENCY,
+    DecisionRequest,
+    ExplanationFact,
+    FinancialDecision,
+    FACT_BOOL,
+    FACT_DATE,
+    FACT_INT,
+    FACT_MONEY,
+    FACT_TEXT,
+    V_AMOUNT_INCOMPLETE,
+    V_DEADLINE,
+    V_METHOD_NOT_ALLOWED,
+    V_MIN_BALANCE,
+    V_NON_FLEXIBLE_CHANGED,
+    V_OUTSIDE_HORIZON,
+    decide,
+    verify_invariants,
+)
+from decision.payment_plans import (
+    AFFORDABLE_LATER,
+    AFFORDABLE_NOW,
+    AFFORDABLE_WITH_PLAN,
+    NOT_AFFORDABLE,
+    METHOD_FULL,
+    METHOD_INSTALLMENTS,
+    METHOD_NONE,
+    METHOD_PARTIAL,
+    METHOD_WAIT,
+    CandidatePlan,
+    InstallmentOption,
+    affordability_status,
+    build_candidates,
+    build_full_payment,
+    build_installment_plan,
+    build_partial_payment,
+    build_wait_plan,
+    select_plan,
+)
+
 __all__ = [
     "ConsequenceResult", "evaluate_consequence",
     "DECISION_BUY", "DECISION_WAIT", "DECISION_SPEND_LESS", "DECISION_AVOID",
@@ -51,4 +123,23 @@ __all__ = [
     "STATUS_ACHIEVED", "STATUS_ON_TRACK", "STATUS_BEHIND", "STATUS_UNKNOWN",
     "RecoveryOption", "RecoveryResult", "evaluate_recovery", "RECOVERY_HORIZON_DAYS",
     "Alternative", "build_alternatives",
+    # Phase D - Financial Decision Intelligence
+    "Baseline", "PlanPayment", "SafetyCheck", "SpendingChange",
+    "SAFETY_HORIZON_DAYS", "ACTION_REDUCE", "ACTION_STOP",
+    "FAIL_AMOUNT_INCOMPLETE", "FAIL_DEADLINE_MISSED", "FAIL_MIN_BALANCE",
+    "FAIL_PAYMENT_OUTSIDE_HORIZON",
+    "amount_safe_to_pay", "build_baseline", "earliest_date_for_full_payment",
+    "earliest_safe_date_for", "evaluate_plan", "is_safe", "simulate",
+    "MAX_CHANGES", "find_adjustments", "flexible_candidates", "total_monthly_saving",
+    "AFFORDABLE_NOW", "AFFORDABLE_WITH_PLAN", "AFFORDABLE_LATER", "NOT_AFFORDABLE",
+    "METHOD_FULL", "METHOD_PARTIAL", "METHOD_INSTALLMENTS", "METHOD_WAIT", "METHOD_NONE",
+    "CandidatePlan", "InstallmentOption", "affordability_status",
+    "build_candidates", "build_full_payment", "build_installment_plan",
+    "build_partial_payment", "build_wait_plan", "select_plan",
+    # Phase E - orchestrator + canonical decision object
+    "CURRENCY", "DecisionRequest", "FinancialDecision", "ExplanationFact",
+    "FACT_MONEY", "FACT_DATE", "FACT_INT", "FACT_TEXT", "FACT_BOOL",
+    "V_MIN_BALANCE", "V_OUTSIDE_HORIZON", "V_AMOUNT_INCOMPLETE",
+    "V_DEADLINE", "V_METHOD_NOT_ALLOWED", "V_NON_FLEXIBLE_CHANGED",
+    "decide", "verify_invariants",
 ]

@@ -184,6 +184,35 @@ def _walk(node, acc: set) -> None:
             _walk(v, acc)
 
 
+# ------------------------------------------------------------- authoritative dates
+
+def authorized_dates(node) -> set:
+    """Every ISO date (``YYYY-MM-DD``) anywhere in the authoritative result.
+
+    Dates matter as much as amounts: "you can pay the rest on 2026-11-20" is a
+    financial claim. Only ISO-formatted dates are checked, because that is the
+    only form the engines emit and therefore the only form a model can be
+    echoing rather than inventing.
+    """
+    acc: set = set()
+    _walk_dates(node, acc)
+    return acc
+
+
+def _walk_dates(node, acc: set) -> None:
+    if isinstance(node, str):
+        if _DATE_ISO.fullmatch(node.strip()):
+            acc.add(node.strip())
+        return
+    if isinstance(node, dict):
+        for v in node.values():
+            _walk_dates(v, acc)
+        return
+    if isinstance(node, (list, tuple, set)):
+        for v in node:
+            _walk_dates(v, acc)
+
+
 # ------------------------------------------------------------------ verdict guard
 
 _SAYS_BUY = re.compile(
@@ -272,6 +301,19 @@ def _verify_verdict(tool_name: str, data: dict, text: str) -> Optional[GuardResu
         if str(data.get("risk_change", "")).lower() == "worsened" and _RISK_FINE.search(text):
             return GuardResult(False, "risk_contradiction", "engine=worsened")
         return None
+    if tool_name == "plan_purchase_decision":
+        status = str(data.get("affordability_status", "")).lower()
+        says_can = bool(_SAYS_CAN_AFFORD.search(text) or _SAYS_BUY.search(text))
+        says_cannot = bool(_SAYS_CANNOT_AFFORD.search(text))
+        if status == "not_affordable" and says_can and not says_cannot:
+            return GuardResult(False, "status_contradiction", "engine=not_affordable")
+        if status == "affordable_now" and says_cannot and not says_can:
+            return GuardResult(False, "status_contradiction", "engine=affordable_now")
+        # claiming it is payable in full today when the engine says otherwise
+        if status in ("affordable_later", "affordable_with_plan")                 and _SAYS_BUY.search(text) and not (says_cannot or _SAYS_WAIT.search(text)
+                                                    or _SAYS_SPEND_LESS.search(text)):
+            return GuardResult(False, "status_contradiction", f"engine={status}")
+        return None
     if tool_name == "check_affordability":
         verdict = str(data.get("verdict", "")).lower()
         if verdict == "not_affordable" and _SAYS_CAN_AFFORD.search(text) and not _SAYS_CANNOT_AFFORD.search(text):
@@ -321,6 +363,17 @@ def verify(tool_name, data, text, *, intent=None, summary=None) -> GuardResult:
     for mv in monies:
         if mv.value not in allowed:
             return GuardResult(False, "unauthorized_number", mv.raw)
+
+    # Dates are financial claims too. Only enforced when the authoritative
+    # result actually publishes ISO dates, so tools that return none are
+    # unaffected.
+    allowed_dates = authorized_dates(data)
+    if summary is not None:
+        allowed_dates |= authorized_dates(summary)
+    if allowed_dates:
+        for found in _DATE_ISO.findall(t):
+            if found not in allowed_dates:
+                return GuardResult(False, "unauthorized_date", found)
 
     verdict_fail = _verify_verdict(tool_name, data or {}, t)
     if verdict_fail is not None:
